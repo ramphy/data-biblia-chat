@@ -69,7 +69,8 @@ router.get('/:lang/:bible_abbreviation/:bible_book/:bible_chapter', async (req, 
         try {
             const buildId = await getBuildId(); // Get current or fetch new BUILD_ID
             // Use the looked-up bible_id in the API URL
-            const apiUrl = `https://www.bible.com/_next/data/${buildId}/${lang}/bible/${bible_id}/${bible_book}.${bible_chapter}/${bible_id_json}?versionId=${bible_id}&usfm=${bible_book}.${bible_chapter}.${bible_abbreviation}`;
+            // const apiUrl = `https://www.bible.com/_next/data/${buildId}/${lang}/bible/${bible_id}/${bible_book}.${bible_chapter}/${bible_id_json}?versionId=${bible_id}&usfm=${bible_book}.${bible_chapter}.${bible_abbreviation}`;
+            const apiUrl = `https://www.bible.com/_next/data/${buildId}/${lang}/bible/${bible_id}/${bible_book}.${bible_chapter}.${bible_abbreviation}.json?versionId=${bible_id}&usfm=${bible_book}.${bible_chapter}.${bible_abbreviation}`;
 
             console.log(`Attempt ${attempt}: Fetching data from ${apiUrl}`);
             const bibleResponse = await axios.get(apiUrl, {
