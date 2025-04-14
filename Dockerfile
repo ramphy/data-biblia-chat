@@ -17,4 +17,4 @@ COPY . .
 EXPOSE 1020
 
 # Define el comando para ejecutar la aplicación (servidor y worker) usando concurrently
-CMD [ "npm", "run", "start:docker" ]
+CMD [ "npm", "run", "start" ]
