@@ -4,6 +4,16 @@ const cheerio = require('cheerio'); // Import cheerio
 
 const router = express.Router();
 
+// Mapping from Bible abbreviation to ID
+const bibleVersionMap = {
+  "BDO1573": 1715, "BHTI": 222, "BLPH": 28, "DHH94I": 52, "DHH94PC": 411,
+  "DHHDK": 1845, "DHHS94": 1846, "GlossSP": 4212, "JBS": 1076, "LBLA": 89,
+  "NBLA": 103, "NBV": 753, "NTBIZ": 3539, "NTV": 127, "NVI-S": 128, // Note: NVI-S maps to 128, ignoring 2664 for simplicity or choosing one. User might need to clarify if distinction is needed.
+  "ONBV": 4190, "spaPdDpt": 3365, "PDT": 197, "RVA2015": 1782, "RVC": 146,
+  "RVES": 147, "RVR09": 1718, "RVR1960": 149, "RVR95": 150, "TCB": 4013,
+  "TLA": 176, "TLAI": 178, "VBL": 3291
+};
+
 let currentBuildId = null; // Variable to store the BUILD_ID in memory
 
 // Function to fetch the BUILD_ID from bible.com
@@ -38,17 +48,27 @@ async function getBuildId() {
     return currentBuildId;
 }
 
-// Route handler for fetching Bible chapter data
-router.get('/:lang/:bible_id/:bible_book/:bible_chapter', async (req, res) => {
-    const { lang, bible_id, bible_book, bible_chapter } = req.params;
-    const bible_id_json = `${bible_id}.json`; // Construct the JSON filename
+// Route handler for fetching Bible chapter data using abbreviation
+router.get('/:lang/:bible_abbreviation/:bible_book/:bible_chapter', async (req, res) => {
+    const { lang, bible_abbreviation, bible_book, bible_chapter } = req.params;
 
-    console.log(`Request received for: ${lang}/${bible_id}/${bible_book}/${bible_chapter}`);
+    // Look up the bible_id from the abbreviation
+    const bible_id = bibleVersionMap[bible_abbreviation];
+
+    if (!bible_id) {
+        console.log(`Bible abbreviation not found: ${bible_abbreviation}`);
+        return res.status(404).json({ error: `Bible version abbreviation '${bible_abbreviation}' not found.` });
+    }
+
+    const bible_id_json = `${bible_id}.json`; // Construct the JSON filename using the found ID
+
+    console.log(`Request received for: ${lang}/${bible_abbreviation} (ID: ${bible_id})/${bible_book}/${bible_chapter}`);
 
     let attempt = 1;
     while (attempt <= 2) { // Allow one initial attempt and one retry
         try {
             const buildId = await getBuildId(); // Get current or fetch new BUILD_ID
+            // Use the looked-up bible_id in the API URL
             const apiUrl = `https://www.bible.com/_next/data/${buildId}/${lang}/bible/${bible_id}/${bible_book}.${bible_chapter}/${bible_id_json}`;
 
             console.log(`Attempt ${attempt}: Fetching data from ${apiUrl}`);
@@ -279,18 +299,27 @@ function parseBibleHtmlToJson(htmlString) {
     return result;
 }
 
-// Route handler for fetching Bible version data
-router.get('/:lang/:bible_id', async (req, res) => {
-    const { lang, bible_id } = req.params;
-    const bible_id_json = `${bible_id}.json`; // Construct the JSON filename for the URL
+// Route handler for fetching Bible version data using abbreviation
+router.get('/:lang/:bible_abbreviation', async (req, res) => {
+    const { lang, bible_abbreviation } = req.params;
 
-    console.log(`Request received for version info: ${lang}/${bible_id}`);
+    // Look up the bible_id from the abbreviation
+    const bible_id = bibleVersionMap[bible_abbreviation];
+
+    if (!bible_id) {
+        console.log(`Bible abbreviation not found for version info: ${bible_abbreviation}`);
+        return res.status(404).json({ error: `Bible version abbreviation '${bible_abbreviation}' not found.` });
+    }
+
+    const bible_id_json = `${bible_id}.json`; // Construct the JSON filename using the found ID
+
+    console.log(`Request received for version info: ${lang}/${bible_abbreviation} (ID: ${bible_id})`);
 
     let attempt = 1;
     while (attempt <= 2) { // Allow one initial attempt and one retry
         try {
             const buildId = await getBuildId(); // Get current or fetch new BUILD_ID
-            // Note the different URL structure for version info
+            // Note the different URL structure for version info - use the looked-up bible_id
             const apiUrl = `https://www.bible.com/_next/data/${buildId}/${lang}/versions/${bible_id_json}`;
 
             console.log(`Attempt ${attempt}: Fetching version data from ${apiUrl}`);
