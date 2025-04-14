@@ -2,7 +2,7 @@ name: Remote update execution
 on:
   push:
     branches:
-      - dev
+      - main
 jobs:
   build:
     name: Build
@@ -18,20 +18,20 @@ jobs:
         script: |
           cd /home
           # Limpiar o crear directorio
-          rm -rf clone_api-biblia-chat || true
-          mkdir -p clone_api-biblia-chat
-          cd clone_api-biblia-chat
+          rm -rf clone_data-biblia-chat || true
+          mkdir -p clone_data-biblia-chat
+          cd clone_data-biblia-chat
           
           # Clonar usando variable de autenticación
-          git clone https://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@github.com/ramphy/api-biblia-chat.git
+          git clone https://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@github.com/ramphy/data-biblia-chat.git
           cd */
           
           # Verificar y eliminar stack si existe
-          if docker stack ls | grep -q "api-biblia-chat"
+          if docker stack ls | grep -q "data-biblia-chat"
           then 
-            docker stack rm api-biblia-chat
+            docker stack rm data-biblia-chat
             # Esperar a que los servicios se detengan
-            while docker stack ps api-biblia-chat 2>/dev/null | grep -q "Running"
+            while docker stack ps data-biblia-chat 2>/dev/null | grep -q "Running"
             do
               sleep 2
             done
@@ -39,5 +39,5 @@ jobs:
           
           # Limpiar imágenes y construir
           docker image prune -a -f
-          docker build -t api-biblia-chat .
-          docker stack deploy -c docker-compose.yml api-biblia-chat
+          docker build -t data-biblia-chat .
+          docker stack deploy -c docker-compose.yml data-biblia-chat
