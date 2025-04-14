@@ -1,0 +1,25 @@
+version: "3.9"
+services:
+  api-biblia-chat:
+    image: api-biblia-chat
+    networks:
+      - redmasiva
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      labels: # Labels moved under deploy
+        - "traefik.enable=true"
+        - "traefik.http.routers.api-biblia-chat.rule=Host(`data.biblia.chat`)"
+        - "traefik.http.routers.api-biblia-chat.entrypoints=websecure"
+        - "traefik.http.routers.api-biblia-chat.tls.certresolver=letsencryptresolver"
+        - "traefik.http.routers.api-biblia-chat.priority=1"
+        - "traefik.http.routers.api-biblia-chat.service=api-biblia-chat"
+        - "traefik.http.services.api-biblia-chat.loadbalancer.server.port=1020"
+        - "traefik.http.services.api-biblia-chat.loadbalancer.passHostHeader=true"
+networks:
+  redmasiva:
+    external: true
+    name: redmasiva

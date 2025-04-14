@@ -1,0 +1,43 @@
+name: Remote update execution
+on:
+  push:
+    branches:
+      - dev
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+    - name: executing remote ssh beta
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: portainer.us-beta.redmasiva.com
+        username: root
+        password: Xamphy123.  # Mejor usar un secreto
+        port: 22
+        script: |
+          cd /home
+          # Limpiar o crear directorio
+          rm -rf clone_api-biblia-chat || true
+          mkdir -p clone_api-biblia-chat
+          cd clone_api-biblia-chat
+          
+          # Clonar usando variable de autenticación
+          git clone https://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@github.com/ramphy/api-biblia-chat.git
+          cd */
+          
+          # Verificar y eliminar stack si existe
+          if docker stack ls | grep -q "api-biblia-chat"
+          then 
+            docker stack rm api-biblia-chat
+            # Esperar a que los servicios se detengan
+            while docker stack ps api-biblia-chat 2>/dev/null | grep -q "Running"
+            do
+              sleep 2
+            done
+          fi
+          
+          # Limpiar imágenes y construir
+          docker image prune -a -f
+          docker build -t api-biblia-chat .
+          docker stack deploy -c docker-compose.yml api-biblia-chat
