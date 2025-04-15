@@ -19,7 +19,7 @@ const s3Config = {
 const s3Client = new S3Client(s3Config);
 const s3BucketName = "data-biblia-chat";
 
-console.log("S3 Client configured for Backblaze B2 in audio_utils.js.");
+// console.log("S3 Client configured for Backblaze B2 in audio_utils.js.");
 
 // --- Constants ---
 const SPEECHIFY_API_URL = "https://audio.api.speechify.com/generateAudioFiles";
@@ -71,7 +71,7 @@ function splitTextIntoChunks(text, limit) {
  * @returns {Promise<object>} - The JSON response from Speechify, likely containing audio URL(s).
  */
 async function generateAudioSpeechify(textChunk, voiceName = "Linda", languageCode = "es-ES", audioFormat = "mp3") {
-    console.log(`Requesting audio generation for chunk starting with: "${textChunk.substring(0, 50)}..."`);
+    // console.log(`Requesting audio generation for chunk starting with: "${textChunk.substring(0, 50)}..."`);
     const payload = {
         audioFormat: audioFormat,
         paragraphChunks: [textChunk], // API expects an array of strings
@@ -99,7 +99,7 @@ async function generateAudioSpeechify(textChunk, voiceName = "Linda", languageCo
     try {
         const response = await axios.post(SPEECHIFY_API_URL, payload, { headers: headers, timeout: 60000 }); // 60s timeout for potentially long audio generation
         if (response.status === 200 && response.data && response.data.audioStream) { // Check for audioStream field based on typical API responses
-            console.log("Speechify API call successful.");
+            // console.log("Speechify API call successful.");
             return response.data; // Return the whole data object
         } else {
             console.error(`Speechify API error: Status ${response.status}`, response.data);
@@ -119,13 +119,13 @@ async function generateAudioSpeechify(textChunk, voiceName = "Linda", languageCo
  */
 async function saveAudioChunkFromBase64(base64Audio, tempDir) {
     const tempFilePath = path.join(tempDir, `${uuidv4()}.mp3`);
-    console.log(`Decoding Base64 audio chunk and saving to ${tempFilePath}`);
+    // console.log(`Decoding Base64 audio chunk and saving to ${tempFilePath}`);
     try {
         // Decode the Base64 string into a buffer
         const audioBuffer = Buffer.from(base64Audio, 'base64');
         // Write the buffer to the temporary file
         await fs.writeFile(tempFilePath, audioBuffer);
-        console.log(`Successfully saved decoded audio to ${tempFilePath}`);
+        // console.log(`Successfully saved decoded audio to ${tempFilePath}`);
         return tempFilePath;
     } catch (error) {
         console.error(`Error decoding/saving Base64 audio chunk to ${tempFilePath}:`, error.message);
@@ -141,11 +141,11 @@ async function saveAudioChunkFromBase64(base64Audio, tempDir) {
  */
 function concatenateAudioFiles(inputFilePaths, outputFilePath) {
     return new Promise((resolve, reject) => {
-        console.log(`Concatenating ${inputFilePaths.length} files into ${outputFilePath}`);
+        // console.log(`Concatenating ${inputFilePaths.length} files into ${outputFilePath}`);
         audioconcat(inputFilePaths)
             .concat(outputFilePath)
             .on('start', function (command) {
-                console.log('ffmpeg process started:', command);
+                // console.log('ffmpeg process started:', command);
             })
             .on('error', function (err, stdout, stderr) {
                 console.error('Error during audio concatenation:', err);
@@ -156,12 +156,12 @@ function concatenateAudioFiles(inputFilePaths, outputFilePath) {
             })
             .on('end', function (output) {
                 // Log the output from the event for debugging, but don't rely on it for the path
-                console.log(`Audio concatenation 'end' event received. Event output: ${output}`);
+                // console.log(`Audio concatenation 'end' event received. Event output: ${output}`);
                 // Clean up the individual chunk files after successful concatenation
                 Promise.all(inputFilePaths.map(filePath => fs.unlink(filePath).catch(e => console.error(`Failed to delete temp input file ${filePath}: ${e.message}`))))
                     .finally(() => {
                         // Always resolve with the known outputFilePath after attempting cleanup
-                        console.log(`Resolving concatenation promise with path: ${outputFilePath}`);
+                        // console.log(`Resolving concatenation promise with path: ${outputFilePath}`);
                         resolve(outputFilePath);
                     });
             });
@@ -177,7 +177,7 @@ function concatenateAudioFiles(inputFilePaths, outputFilePath) {
  * @returns {Promise<string>} - The URL of the uploaded object.
  */
 async function uploadToS3(key, filePath, contentType) {
-    console.log(`Uploading ${filePath} to S3 key ${key}`);
+    // console.log(`Uploading ${filePath} to S3 key ${key}`);
     try {
         const fileBuffer = await fs.readFile(filePath);
         const command = new PutObjectCommand({
@@ -191,7 +191,7 @@ async function uploadToS3(key, filePath, contentType) {
         await s3Client.send(command);
         // Construct the public URL using the custom domain format
         const url = `https://s3.redmasiva.ai/file/${s3BucketName}/${key}`;
-        console.log(`Successfully uploaded to S3. Custom URL: ${url}`);
+        // console.log(`Successfully uploaded to S3. Custom URL: ${url}`);
         return url;
     } catch (error) {
         console.error(`Error uploading ${filePath} to S3:`, error);

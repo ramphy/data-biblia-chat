@@ -1,9 +1,9 @@
-FROM jrottenberg/ffmpeg:5.1-ubuntu2204 AS ffmpeg
+# Usa una imagen base de Node.js
+FROM node:bullseye-slim
 
-FROM node:23-slim AS base
+RUN apt update
 
-# Install ffmpeg
-COPY --from=ffmpeg / /
+RUN apt install -y ffmpeg
 # Establece el directorio de trabajo en el contenedor
 WORKDIR /usr/src/app
 
