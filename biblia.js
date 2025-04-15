@@ -4,6 +4,7 @@ const cheerio = require('cheerio');
 const { Pool } = require('pg');
 const os = require('os');
 const path = require('path');
+const fs = require('fs').promises; // Added fs.promises for async file operations
 const {
     splitTextIntoChunks,
     generateAudioSpeechify,
@@ -331,18 +332,18 @@ function parseBibleHtmlToJson(htmlString) {
 
 // --- New POST Audio Bible Endpoint ---
 router.post('/audio-bible', async (req, res) => {
-    // Extract data from JSON body - Added bible_lang, removed language_code and voice_name
+    // Extract data from JSON body - Removed 'text', added bible_lang
     const {
-        text,               // The pre-processed text to convert to audio
+        // text,            // REMOVED: Text will be fetched internally
         bible_abbreviation, // Bible version abbreviation (e.g., "NVI-S")
         bible_book,         // Book code (e.g., "GEN")
         bible_chapter,      // Chapter number (e.g., "1")
         bible_lang          // NEW: Language identifier (e.g., "es")
     } = req.body;
 
-    // Basic Input Validation - Added bible_lang check
-    if (!text || !bible_abbreviation || !bible_book || !bible_chapter || !bible_lang) {
-        return res.status(400).json({ error: "Missing required fields: 'text', 'bible_abbreviation', 'bible_book', 'bible_chapter', and 'bible_lang' are required in the JSON body." });
+    // Basic Input Validation - Removed 'text' check, added bible_lang check
+    if (!bible_abbreviation || !bible_book || !bible_chapter || !bible_lang) {
+        return res.status(400).json({ error: "Missing required fields: 'bible_abbreviation', 'bible_book', 'bible_chapter', and 'bible_lang' are required in the JSON body." });
     }
 
     // Determine language_code and voice_name based on bible_lang
@@ -391,11 +392,54 @@ router.post('/audio-bible', async (req, res) => {
         }
         console.log(`Audio not found in DB for ${bible_reference_log}. Proceeding to generate.`);
 
-        // 2. Split Text if Necessary
-        const textChunks = splitTextIntoChunks(text, SPEECHIFY_CHAR_LIMIT);
-        console.log(`Input text split into ${textChunks.length} chunk(s).`);
+        // 2. Fetch Text Internally
+        let fetchedText = '';
+        try {
+            const textApiUrl = `http://localhost:1020/api/${bible_lang}/${bible_abbreviation}/${bible_book}/${bible_chapter}`; // Corrected API path
+            console.log(`Fetching text from internal API: ${textApiUrl}`);
+            const textResponse = await axios.get(textApiUrl, { timeout: 5000 }); // 5 second timeout
 
-        // 3. Generate Audio for Each Chunk
+            if (textResponse.data && textResponse.data.title && Array.isArray(textResponse.data.content)) {
+                const title = textResponse.data.title;
+                const content = textResponse.data.content;
+                let textParts = [];
+
+                // Add formatted title
+                if (title) {
+                    textParts.push(`${title}:`);
+                }
+
+                // Find and add formatted first heading
+                const firstHeadingIndex = content.findIndex(item => item.type === 'heading');
+                let firstHeadingText = null;
+                if (firstHeadingIndex !== -1 && content[firstHeadingIndex].text) {
+                    firstHeadingText = content[firstHeadingIndex].text;
+                    textParts.push(`${firstHeadingText}...`);
+                }
+
+                // Add remaining content text (excluding the first heading if found)
+                content.forEach((item, index) => {
+                    // Add text if it exists and is not the first heading we already added
+                    if (item.text && index !== firstHeadingIndex) {
+                        textParts.push(item.text);
+                    }
+                });
+
+                fetchedText = textParts.join('\n'); // Join with newline
+                console.log("Formatted Text Content for Audio:\n", fetchedText); // Log the formatted text
+            } else {
+                throw new Error('Invalid or incomplete data received from internal text API (missing title or content array).');
+            }
+        } catch (fetchError) {
+            console.error(`Error fetching text from internal API for ${bible_reference_log}:`, fetchError.message);
+            return res.status(500).json({ error: `Failed to fetch required text content: ${fetchError.message}` });
+        }
+
+        // 3. Split Fetched Text if Necessary
+        const textChunks = splitTextIntoChunks(fetchedText, SPEECHIFY_CHAR_LIMIT);
+        console.log(`Fetched text split into ${textChunks.length} chunk(s).`);
+
+        // 4. Generate Audio for Each Chunk
         const speechifyPromises = textChunks.map(chunk =>
             generateAudioSpeechify(chunk, voice_name, language_code, "mp3")
         );
