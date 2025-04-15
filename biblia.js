@@ -132,11 +132,12 @@ router.get('/:lang/:bible_abbreviation/:bible_book/:bible_chapter', async (req, 
                   let finalContent = [];
                   if (Array.isArray(parsedContent)) {
                       parsedContent.forEach(item => {
-                          if (item.type === 'heading') {
-                              finalContent.push(item); // Keep heading objects
-                           } else if (item.verses && Array.isArray(item.verses)) {
-                               item.verses.forEach(verse => {
-                                   // Push an object containing number, usfm, and text for each verse
+                          // Keep heading and reference (subheading) objects
+                          if (item.type === 'heading' || item.type === 'reference') {
+                              finalContent.push(item);
+                          } else if (item.verses && Array.isArray(item.verses)) {
+                              item.verses.forEach(verse => {
+                                  // Push an object containing number, usfm, and text for each verse
                                    // Ensure number and usfm are included even if text is empty, if they exist
                                    if (verse.number !== null || verse.usfm || verse.text) {
                                        finalContent.push({
