@@ -388,7 +388,7 @@ router.post('/audio-bible', async (req, res) => {
 
         if (dbCheckResult.rows.length > 0) {
             console.log(`Audio found in DB for ${bible_reference_log}. Returning cached URL.`);
-            return res.json({ s3_url: dbCheckResult.rows[0].s3_url });
+            return res.json({ audio_url: dbCheckResult.rows[0].s3_url });
         }
         console.log(`Audio not found in DB for ${bible_reference_log}. Proceeding to generate.`);
 
@@ -417,10 +417,10 @@ router.post('/audio-bible', async (req, res) => {
                     textParts.push(`${firstHeadingText}...`);
                 }
 
-                // Add remaining content text (excluding the first heading if found)
+                // Add remaining content text (excluding the first heading if found and excluding references)
                 content.forEach((item, index) => {
-                    // Add text if it exists and is not the first heading we already added
-                    if (item.text && index !== firstHeadingIndex) {
+                    // Add text if it exists, is not the first heading we already added, and is not a reference type
+                    if (item.text && index !== firstHeadingIndex && item.type !== 'reference') {
                         textParts.push(item.text);
                     }
                 });
