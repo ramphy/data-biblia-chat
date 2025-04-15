@@ -9,7 +9,7 @@ COPY package*.json ./
 
 # Instala las dependencias del proyecto
 RUN npm install
-
+RUN apt install -y ffmpeg
 # Copia los archivos del proyecto al directorio de trabajo
 COPY . .
 

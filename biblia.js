@@ -1,8 +1,39 @@
 const express = require('express');
 const axios = require('axios');
-const cheerio = require('cheerio'); // Import cheerio
+const cheerio = require('cheerio');
+const { Pool } = require('pg');
+const os = require('os');
+const path = require('path');
+const {
+    splitTextIntoChunks,
+    generateAudioSpeechify,
+    saveAudioChunkFromBase64, // Import the correct function
+    concatenateAudioFiles,
+    uploadToS3,
+    SPEECHIFY_CHAR_LIMIT
+} = require('./audio_utils'); // Import audio utilities
 
 const router = express.Router();
+
+// --- Database Configuration ---
+// WARNING: Hardcoding credentials is not recommended for production. Use environment variables.
+const pool = new Pool({
+  host: 'portainer.beta.redmasiva.com',
+  user: 'data-biblia-chat',
+  database: 'data-biblia-chat',
+  password: 'Ramphy123;;', // Ensure this is correct
+  port: 5432,
+  max: 10, // Example: Set max connections in pool
+  idleTimeoutMillis: 30000, // Example: Close idle clients after 30s
+  connectionTimeoutMillis: 2000, // Example: Return error if connection takes >2s
+});
+
+pool.on('error', (err, client) => {
+  console.error('Unexpected error on idle client', err);
+  process.exit(-1); // Exit if pool encounters critical error
+});
+
+console.log("PostgreSQL Pool configured for biblia.js.");
 
 // Mapping from Bible abbreviation to ID
 const bibleVersionMap = {
@@ -281,6 +312,124 @@ function parseBibleHtmlToJson(htmlString) {
     result.book.chapters.push(chapterData);
     return result;
 }
+
+
+// --- New POST Audio Bible Endpoint ---
+router.post('/audio-bible', async (req, res) => {
+    // Extract data from JSON body
+    const {
+        text,               // The pre-processed text to convert to audio
+        bible_abbreviation, // Bible version abbreviation (e.g., "NVI-S")
+        bible_book,         // Book code (e.g., "GEN")
+        bible_chapter,      // Chapter number (e.g., "1")
+        language_code = "es-ES", // Default language code for Speechify (Spanish)
+        voice_name = "Linda"     // Default voice name for Speechify (Spanish)
+    } = req.body;
+
+    // Basic Input Validation
+    if (!text || !bible_abbreviation || !bible_book || !bible_chapter) {
+        return res.status(400).json({ error: "Missing required fields: 'text', 'bible_abbreviation', 'bible_book', and 'bible_chapter' are required in the JSON body." });
+    }
+
+    // Normalize inputs for consistency
+    const normAbbr = bible_abbreviation; // Keep abbreviation as is (case might matter)
+    const normBook = bible_book.toUpperCase();
+    const normChapter = bible_chapter.toString(); // Ensure chapter is a string
+
+    // Construct a reference string for logging and S3 key generation
+    const bible_reference_log = `${normAbbr}/${normBook}/${normChapter}`;
+    const s3Key = `audio/${normAbbr}_${normBook}_${normChapter}.mp3`; // S3 key format without lang
+
+    console.log(`POST /audio-bible request received for: ${bible_reference_log}`);
+
+    let dbClient;
+    const tempDir = os.tmpdir();
+    let tempAudioFiles = []; // Keep track of temporary files created
+
+    try {
+        // 1. Check Database using individual fields (excluding lang)
+        dbClient = await pool.connect();
+        console.log(`Checking DB for: ${normAbbr}, ${normBook}, ${normChapter}`);
+        const dbCheckResult = await dbClient.query(
+            `SELECT s3_url FROM audio_biblia
+             WHERE bible_abbreviation = $1 AND bible_book = $2 AND bible_chapter = $3`,
+            [normAbbr, normBook, normChapter]
+        );
+
+        if (dbCheckResult.rows.length > 0) {
+            console.log(`Audio found in DB for ${bible_reference_log}. Returning cached URL.`);
+            return res.json({ s3_url: dbCheckResult.rows[0].s3_url });
+        }
+        console.log(`Audio not found in DB for ${bible_reference_log}. Proceeding to generate.`);
+
+        // 2. Split Text if Necessary
+        const textChunks = splitTextIntoChunks(text, SPEECHIFY_CHAR_LIMIT);
+        console.log(`Input text split into ${textChunks.length} chunk(s).`);
+
+        // 3. Generate Audio for Each Chunk
+        const speechifyPromises = textChunks.map(chunk =>
+            generateAudioSpeechify(chunk, voice_name, language_code, "mp3")
+        );
+        const speechifyResults = await Promise.all(speechifyPromises);
+
+        // 4. Save Audio Chunks from Base64
+        const savePromises = speechifyResults.map(result => {
+            if (!result || !result.audioStream) {
+                 throw new Error("Invalid response received from Speechify API (missing audioStream).");
+            }
+            // Call the function to decode Base64 and save the file
+            return saveAudioChunkFromBase64(result.audioStream, tempDir);
+        });
+        tempAudioFiles = await Promise.all(savePromises); // Get paths to saved temp files
+
+        // 5. Concatenate Audio Files (if more than one chunk)
+        let finalAudioPath;
+        if (tempAudioFiles.length === 1) {
+            finalAudioPath = tempAudioFiles[0];
+            console.log("Single audio chunk, no concatenation needed.");
+        } else {
+            // Use a unique name for the concatenated file in temp dir (without lang)
+            const concatenatedPath = path.join(tempDir, `final_${normAbbr}_${normBook}_${normChapter}.mp3`);
+            finalAudioPath = await concatenateAudioFiles(tempAudioFiles, concatenatedPath);
+            // tempAudioFiles are deleted by concatenateAudioFiles on success/error
+            tempAudioFiles = [finalAudioPath]; // Track only the final concatenated file
+        }
+
+        // 6. Upload Final Audio to S3
+        const s3Url = await uploadToS3(s3Key, finalAudioPath, 'audio/mpeg');
+        // finalAudioPath is deleted by uploadToS3 on success/error
+
+        // 7. Save Record to Database using individual fields (excluding lang)
+        console.log(`Inserting record into DB: ${normAbbr}, ${normBook}, ${normChapter}, ${s3Url}`);
+        await dbClient.query(
+            `INSERT INTO audio_biblia (bible_abbreviation, bible_book, bible_chapter, s3_url)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (bible_abbreviation, bible_book, bible_chapter) DO NOTHING`, // Use updated unique constraint
+            [normAbbr, normBook, normChapter, s3Url]
+        );
+        console.log(`DB record inserted/updated for ${bible_reference_log}.`);
+
+        // 8. Return S3 URL
+        return res.json({ s3_url: s3Url });
+
+    } catch (error) {
+        console.error(`Error processing POST /audio-bible request for ${bible_reference_log}:`, error);
+        // Ensure temporary files are cleaned up on error
+        if (tempAudioFiles.length > 0) {
+            console.error(`Cleaning up ${tempAudioFiles.length} temporary audio file(s) due to error...`);
+            await Promise.all(tempAudioFiles.map(filePath =>
+                fs.unlink(filePath).catch(e => console.error(`Failed to delete temp file ${filePath}: ${e.message}`))
+            ));
+        }
+        return res.status(500).json({ error: `Failed to generate audio: ${error.message}` });
+    } finally {
+        if (dbClient) {
+            dbClient.release(); // Release client back to the pool
+            console.log(`DB client released for ${bible_reference_log} POST request.`);
+        }
+    }
+});
+
 
 // Route handler for fetching Bible version data using abbreviation
 router.get('/:lang/:bible_abbreviation', async (req, res) => {
