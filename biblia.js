@@ -156,19 +156,19 @@ router.get('/:lang/:bible_abbreviation/:bible_book/:bible_chapter', async (req, 
     }
 });
 
-// Function to parse Bible HTML content into JSON using Cheerio (Refactored for Merging)
+// Function to parse Bible HTML content into JSON using Cheerio (Updated to handle multiple structures)
 function parseBibleHtmlToJson(htmlString) {
     const $ = cheerio.load(htmlString);
     const result = {};
 
-    // Extract version info
+    // Extract version info (remains the same)
     const versionDiv = $('div.version');
     result.version = {
         id: versionDiv.data('vid')?.toString(),
         language: versionDiv.data('iso6393')
     };
 
-    // Extract book info
+    // Extract book info (remains the same)
     const bookDiv = $('div.book');
     const bookClass = bookDiv.attr('class')?.split(' ').find(cls => cls.startsWith('bk'));
     result.book = {
@@ -182,119 +182,101 @@ function parseBibleHtmlToJson(htmlString) {
     const chapterData = {
         number: chapterClass ? parseInt(chapterClass.substring(2), 10) : null,
         usfm: chapterDiv.data('usfm'),
-        content: [] // This will hold headings, paragraphs, quote blocks etc.
+        content: [] // Holds headings, paragraphs, etc.
     };
 
-    let lastVerseUsfm = null;
-    let lastContentBlock = null; // Keep track of the last paragraph/quote_block added
-
-    chapterDiv.children('div.s, div.p, div.q, div.r').each((_, element) => {
+    // Iterate over main content blocks: headings (s, s1), paragraphs (p), quotes (q), references (r), and the new blocks (m, li1)
+    // This makes it potentially backward compatible if older formats are encountered.
+    chapterDiv.children('div.s, div.s1, div.p, div.q, div.r, div.m, div.li1').each((_, element) => {
         const $element = $(element);
 
-        if ($element.hasClass('s')) { // Section heading
+        if ($element.hasClass('s') || $element.hasClass('s1')) { // Section heading (s or s1)
             chapterData.content.push({
                 type: 'heading',
                 text: $element.find('span.heading').text().trim()
             });
-            lastContentBlock = null; // Reset last block after a heading
-            lastVerseUsfm = null;
         } else if ($element.hasClass('r')) { // Reference heading
+             // Handle potential multiple heading spans within 'r'
             chapterData.content.push({
                 type: 'reference',
                 text: $element.find('span.heading').map((i, el) => $(el).text()).get().join('').trim()
             });
-            lastContentBlock = null; // Reset last block
-            lastVerseUsfm = null;
-        } else if ($element.hasClass('p') || $element.hasClass('q')) { // Paragraph or Quote Line
-            const elementType = $element.hasClass('p') ? 'paragraph' : 'quote_line';
+        } else if ($element.hasClass('p') || $element.hasClass('q') || $element.hasClass('m') || $element.hasClass('li1')) {
+            // Treat p, q, m, li1 as paragraph-like blocks containing verses
+            const blockType = ($element.hasClass('q')) ? 'quote_line' : 'paragraph'; // Keep quote_line distinction if q is present
+            const currentBlock = {
+                type: blockType,
+                verses: []
+            };
 
+            // Find verses within this block
             $element.find('span.verse').each((i, verseElement) => {
                 const $verse = $(verseElement);
                 const currentUsfm = $verse.data('usfm');
-                const currentNumber = parseInt($verse.find('span.label').text(), 10); // May be NaN
+                const currentNumberStr = $verse.children('span.label').first().text(); // Get label text
+                const currentNumber = currentNumberStr ? parseInt(currentNumberStr, 10) : null; // Parse label
 
-                // Extract text content carefully
-                let currentText = '';
-                 $verse.children('span.content').each((idx, contentSpan) => {
-                     // Get text of span.content only, excluding children like notes
-                     currentText += $(contentSpan).clone().children().remove().end().text();
-                 });
-                 // Fallback if no span.content, get text directly from verse span excluding children
+                // Extract text: Concatenate text from all direct child span.content elements
+                let currentText = $verse.children('span.content')
+                                     .map((idx, contentSpan) => $(contentSpan).text()) // Get text of each content span
+                                     .get() // Get as an array of strings
+                                     .join(' ') // Join with space (or newline if preferred: '\n')
+                                     .replace(/\s+/g, ' ') // Normalize whitespace
+                                     .trim(); // Trim start/end
+
+                 // Fallback if no span.content, get text directly from verse span excluding children (less common now?)
                  if (!currentText && $verse.children('span.content').length === 0) {
-                    currentText = $verse.clone().children().remove().end().text();
+                    currentText = $verse.clone().children().remove().end().text().trim();
                  }
-                currentText = currentText.trim();
 
-
-                // Extract notes
+                // Extract notes (remains similar)
                 const currentNotes = [];
                 $verse.find('span.note').each((j, noteElement) => {
                     const $note = $(noteElement);
+                    // Extract note body text more carefully
+                    const noteBody = $note.find('span.body').text().replace(/\s+/g, ' ').trim();
                     currentNotes.push({
-                        type: $note.hasClass('x') ? 'x' : ($note.hasClass('f') ? 'f' : null),
+                        // Determine type based on class (f, x, etc.) - adapt if needed
+                        type: $note.attr('class')?.split(' ').find(c => c !== 'note'),
                         label: $note.find('span.label').text(),
-                        body: $note.find('span.body').text().trim()
+                        body: noteBody
                     });
                 });
 
-                // --- Merging/Adding Logic ---
-                if (lastContentBlock && lastContentBlock.type === elementType && lastVerseUsfm === currentUsfm) {
-                    // Merge with the last verse in the last content block
-                    const lastVerse = lastContentBlock.verses[lastContentBlock.verses.length - 1];
-                    if (currentText) {
-                        lastVerse.text += (lastVerse.text ? '\n' : '') + currentText; // Add newline separator
-                    }
-                    lastVerse.notes.push(...currentNotes);
-                    // Update number if the current one is valid and the existing one wasn't
-                    if ((lastVerse.number === null || isNaN(lastVerse.number)) && !isNaN(currentNumber)) {
-                        lastVerse.number = currentNumber;
-                    }
-                } else {
-                    // Start a new verse object
-                    const newVerse = {
-                        number: !isNaN(currentNumber) ? currentNumber : null,
-                        usfm: currentUsfm,
-                        text: currentText,
-                        notes: currentNotes
-                    };
-
-                    // Add to existing block or create a new one
-                    if (lastContentBlock && lastContentBlock.type === elementType) {
-                         // Add verse only if it has text or notes (or a valid number)
-                         if (newVerse.text || newVerse.notes.length > 0 || newVerse.number !== null) {
-                            lastContentBlock.verses.push(newVerse);
+                // Add verse to the current block if it has content
+                if (currentText || currentNotes.length > 0 || (currentNumber !== null && !isNaN(currentNumber))) {
+                     // Basic merging: If the last verse in the block has the same USFM, append text/notes (less likely needed now?)
+                     // This simple check might need refinement if complex merging is required across blocks.
+                     const lastVerse = currentBlock.verses[currentBlock.verses.length - 1];
+                     if (lastVerse && lastVerse.usfm === currentUsfm) {
+                         if (currentText) {
+                             lastVerse.text += (lastVerse.text ? ' ' : '') + currentText; // Append text
                          }
-                    } else {
-                         // Create a new content block if the verse has content
-                         if (newVerse.text || newVerse.notes.length > 0 || newVerse.number !== null) {
-                            lastContentBlock = {
-                                type: elementType,
-                                verses: [newVerse]
-                            };
-                            chapterData.content.push(lastContentBlock);
-                         } else {
-                             lastContentBlock = null; // Don't create an empty block
+                         lastVerse.notes.push(...currentNotes);
+                         // Update number if the current one is valid and the existing one wasn't
+                         if ((lastVerse.number === null || isNaN(lastVerse.number)) && (currentNumber !== null && !isNaN(currentNumber))) {
+                             lastVerse.number = currentNumber;
                          }
-                    }
-                    lastVerseUsfm = currentUsfm; // Update the last USFM processed
+                     } else {
+                         // Add new verse object
+                         currentBlock.verses.push({
+                             number: (currentNumber !== null && !isNaN(currentNumber)) ? currentNumber : null,
+                             usfm: currentUsfm,
+                             text: currentText,
+                             notes: currentNotes
+                         });
+                     }
                 }
-            });
-             // If the element itself had no verses (e.g., empty <p>), reset last block
-             if ($element.find('span.verse').length === 0) {
-                 lastContentBlock = null;
-                 lastVerseUsfm = null;
-             }
-        }
-    });
+            }); // End verse iteration
 
-    // Clean up empty content blocks potentially added
-    chapterData.content = chapterData.content.filter(block => {
-        if (block.type === 'paragraph' || block.type === 'quote_line') {
-            return block.verses && block.verses.length > 0;
-        }
-        return true; // Keep headings and references
-    });
+            // Add the block to chapter content only if it contains verses
+            if (currentBlock.verses.length > 0) {
+                chapterData.content.push(currentBlock);
+            }
+        } // End paragraph/quote/m/li1 block processing
+    }); // End main content block iteration
 
+    // No need for extra cleanup if blocks are only added when they have verses
 
     result.book.chapters.push(chapterData);
     return result;
