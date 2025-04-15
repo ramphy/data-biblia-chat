@@ -10,7 +10,7 @@ const dbConfig = {
   port: 5432, // Default PostgreSQL port
 };
 
-const createTableQuery = `
+const TableQuerys = `
 -- Drop existing table if it exists to ensure schema update (optional, be careful with existing data)
 -- DROP TABLE IF EXISTS audio_biblia;
 
@@ -25,13 +25,19 @@ CREATE TABLE IF NOT EXISTS audio_biblia (
 );
 `;
 
+// WARNING: Database initialized, add changes as updates.
+// Changes and Updates start here.
+
+
+// Changes and Updates end here.
+
 async function setupDatabase() {
   const client = new Client(dbConfig);
   try {
     await client.connect();
     console.log('Connected to the database.');
 
-    await client.query(createTableQuery);
+    await client.query(TableQuerys);
     console.log('Table "audio_biblia" checked/created successfully.');
 
   } catch (err) {
