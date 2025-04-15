@@ -138,12 +138,13 @@ router.get('/:lang/:bible_abbreviation/:bible_book/:bible_chapter', async (req, 
                           } else if (item.verses && Array.isArray(item.verses)) {
                               item.verses.forEach(verse => {
                                   // Push an object containing number, usfm, and text for each verse
-                                   // Ensure number and usfm are included even if text is empty, if they exist
-                                   if (verse.number !== null || verse.usfm || verse.text) {
+                                   // Ensure number, usfm, or text exist, or if notes exist
+                                   if (verse.number !== null || verse.usfm || verse.text || (verse.notes && verse.notes.length > 0)) {
                                        finalContent.push({
                                            number: verse.number,
                                            usfm: verse.usfm,
-                                           text: verse.text || "" // Ensure text is at least an empty string
+                                           text: verse.text || "", // Ensure text is at least an empty string
+                                           notes: verse.notes || [] // Include notes array, default to empty
                                        });
                                    }
                                });
