@@ -101,7 +101,7 @@ router.get('/:lang/:bible_abbreviation/:bible_book/:bible_chapter', async (req, 
         try {
             const buildId = await getBuildId(); // Get current or fetch new BUILD_ID
             // Use the looked-up bible_id and ensure bible_book is uppercase in the API URL
-            const apiUrl = `https://www.bible.com/_next/data/${buildId}/${lang}/bible/${bible_id}/${bible_book.toUpperCase()}.${bible_chapter}/${bible_id_json}?versionId=${bible_id}&usfm=${bible_book.toUpperCase()}.${bible_chapter}.${bible_abbreviation}`;
+            const apiUrl = `https://www.bible.com/_next/data/${buildId}/${lang}/bible/${bible_id}/${bible_book.toUpperCase()}.${bible_chapter}.${bible_abbreviation}.json?versionId=${bible_id}&usfm=${bible_book.toUpperCase()}.${bible_chapter}.${bible_abbreviation}`;
             // const apiUrl = `https://www.bible.com/_next/data/${buildId}/${lang}/bible/${bible_id}/${bible_book.toUpperCase()}.${bible_chapter}.${bible_abbreviation}.json?versionId=${bible_id}&usfm=${bible_book.toUpperCase()}.${bible_chapter}.${bible_abbreviation}`; // Also updated commented line for consistency
 
             console.log(`Attempt ${attempt}: Fetching data from ${apiUrl}`);
