@@ -129,26 +129,12 @@ router.get('/:lang/:bible_abbreviation/:bible_book/:bible_chapter', async (req, 
                  }
 
                  const simplifiedResponse = {
-                   reference: pageProps.chapterInfo?.reference,
-                   content: parsedContent, // Use the parsed JSON content
-                   copyright: pageProps.chapterInfo?.copyright,
-                   next_chapter: pageProps.chapterInfo?.next,
-                   previous_chapter: pageProps.chapterInfo?.previous,
-                   version: {
-                     id: pageProps.versionData?.id,
-                     abbreviation: pageProps.versionData?.local_abbreviation,
-                     title: pageProps.versionData?.local_title,
-                     language: pageProps.versionData?.language,
-                     publisher: pageProps.versionData?.publisher,
-                     copyright: pageProps.versionData?.copyright_short
-                   },
-                   audio_info: pageProps.audioVersionInfo ? { // Check if audio info exists
-                     title: pageProps.audioVersionInfo.title,
-                     copyright: pageProps.audioVersionInfo.copyright_short,
-                     publisher: pageProps.audioVersionInfo.publisher
-                   } : null,
+                   title: pageProps.chapterInfo?.reference.usfm.human,
                    usfm: pageProps.usfm,
-                   locale: pageProps.locale
+                   locale: pageProps.locale,
+                   content: parsedContent, // Use the parsed JSON content
+                   previous_chapter: pageProps.chapterInfo?.previous,
+                   next_chapter: pageProps.chapterInfo?.next
                  };
 
                  console.log(`Attempt ${attempt}: Successfully fetched and processed data.`);
@@ -338,7 +324,7 @@ router.post('/audio-bible', async (req, res) => {
 
     // Construct a reference string for logging and S3 key generation
     const bible_reference_log = `${normAbbr}/${normBook}/${normChapter}`;
-    const s3Key = `audio/${normAbbr}_${normBook}_${normChapter}.mp3`; // S3 key format without lang
+    const s3Key = `audio/${normAbbr}/${normBook}/${normChapter}.mp3`; // S3 key format without lang
 
     console.log(`POST /audio-bible request received for: ${bible_reference_log}`);
 
