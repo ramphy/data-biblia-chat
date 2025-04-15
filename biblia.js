@@ -124,18 +124,45 @@ router.get('/:lang/:bible_abbreviation/:bible_book/:bible_chapter', async (req, 
                      } catch (parseError) {
                          console.error("Error parsing HTML content:", parseError);
                          // Decide how to handle parsing errors, maybe return raw HTML or an error indicator
-                         parsedContent = { error: "Failed to parse HTML content", details: parseError.message };
-                     }
-                 }
+                          parsedContent = { error: "Failed to parse HTML content", details: parseError.message };
+                      }
+                  }
 
-                 const simplifiedResponse = {
-                   title: pageProps.chapterInfo?.reference.usfm.human,
-                   usfm: pageProps.usfm,
-                   locale: pageProps.locale,
-                   content: parsedContent, // Use the parsed JSON content
-                   previous_chapter: pageProps.chapterInfo?.previous,
-                   next_chapter: pageProps.chapterInfo?.next
-                 };
+                  // Process parsedContent to flatten verses while keeping headings
+                  let finalContent = [];
+                  if (Array.isArray(parsedContent)) {
+                      parsedContent.forEach(item => {
+                          if (item.type === 'heading') {
+                              finalContent.push(item); // Keep heading objects
+                           } else if (item.verses && Array.isArray(item.verses)) {
+                               item.verses.forEach(verse => {
+                                   // Push an object containing number, usfm, and text for each verse
+                                   // Ensure number and usfm are included even if text is empty, if they exist
+                                   if (verse.number !== null || verse.usfm || verse.text) {
+                                       finalContent.push({
+                                           number: verse.number,
+                                           usfm: verse.usfm,
+                                           text: verse.text || "" // Ensure text is at least an empty string
+                                       });
+                                   }
+                               });
+                           }
+                          // Ignore items that are neither headings nor contain verses (or handle other types if needed)
+                      });
+                  } else if (parsedContent && parsedContent.error) {
+                      // If parsing failed, pass the error object through
+                      finalContent = parsedContent;
+                  }
+                  // If parsedContent is null or not an array/error object, finalContent remains empty []
+
+                  const simplifiedResponse = {
+                    title: pageProps.chapterInfo?.reference.usfm.human,
+                    usfm: pageProps.usfm,
+                    locale: pageProps.locale,
+                    content: finalContent, // Use the processed content
+                    previous_chapter: pageProps.chapterInfo?.previous,
+                    next_chapter: pageProps.chapterInfo?.next
+                  };
 
                  console.log(`Attempt ${attempt}: Successfully fetched and processed data.`);
                  return res.json(simplifiedResponse); // Send the simplified response
