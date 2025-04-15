@@ -157,7 +157,7 @@ router.get('/:lang/:bible_abbreviation/:bible_book/:bible_chapter', async (req, 
                   // If parsedContent is null or not an array/error object, finalContent remains empty []
 
                   const simplifiedResponse = {
-                    title: pageProps.chapterInfo?.reference.usfm.human,
+                    title: pageProps.chapterInfo?.reference.human,
                     usfm: pageProps.usfm,
                     locale: pageProps.locale,
                     content: finalContent, // Use the processed content
