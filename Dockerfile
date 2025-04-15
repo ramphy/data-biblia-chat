@@ -1,6 +1,6 @@
 FROM jrottenberg/ffmpeg:5.1-ubuntu2204 AS ffmpeg
 
-FROM node:18-bookworm-slim AS base
+FROM node:23-slim AS base
 
 # Install ffmpeg
 COPY --from=ffmpeg / /
