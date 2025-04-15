@@ -331,31 +331,45 @@ function parseBibleHtmlToJson(htmlString) {
 
 // --- New POST Audio Bible Endpoint ---
 router.post('/audio-bible', async (req, res) => {
-    // Extract data from JSON body
+    // Extract data from JSON body - Added bible_lang, removed language_code and voice_name
     const {
         text,               // The pre-processed text to convert to audio
         bible_abbreviation, // Bible version abbreviation (e.g., "NVI-S")
         bible_book,         // Book code (e.g., "GEN")
         bible_chapter,      // Chapter number (e.g., "1")
-        language_code = "es-ES", // Default language code for Speechify (Spanish)
-        voice_name = "Linda"     // Default voice name for Speechify (Spanish)
+        bible_lang          // NEW: Language identifier (e.g., "es")
     } = req.body;
 
-    // Basic Input Validation
-    if (!text || !bible_abbreviation || !bible_book || !bible_chapter) {
-        return res.status(400).json({ error: "Missing required fields: 'text', 'bible_abbreviation', 'bible_book', and 'bible_chapter' are required in the JSON body." });
+    // Basic Input Validation - Added bible_lang check
+    if (!text || !bible_abbreviation || !bible_book || !bible_chapter || !bible_lang) {
+        return res.status(400).json({ error: "Missing required fields: 'text', 'bible_abbreviation', 'bible_book', 'bible_chapter', and 'bible_lang' are required in the JSON body." });
     }
 
-    // Normalize inputs for consistency
-    const normAbbr = bible_abbreviation; // Keep abbreviation as is (case might matter)
-    const normBook = bible_book.toUpperCase();
-    const normChapter = bible_chapter.toString(); // Ensure chapter is a string
+    // Determine language_code and voice_name based on bible_lang
+    let language_code;
+    let voice_name;
 
-    // Construct a reference string for logging and S3 key generation
+    if (bible_lang.toLowerCase() === 'es') {
+        language_code = "es-ES";
+        voice_name = "Linda";
+        console.log(`Language set to Spanish (es-ES) with voice 'Linda' based on bible_lang='es'.`);
+    } else {
+        // Handle unsupported languages - Returning error for now
+        console.warn(`Unsupported bible_lang received: ${bible_lang}. Only 'es' is currently supported.`);
+        return res.status(400).json({ error: `Unsupported language specified: '${bible_lang}'. Currently, only 'es' is supported.` });
+        // Alternative: Set defaults or add more 'else if' blocks for other languages here
+    }
+
+    // Normalize inputs for consistency (remains the same)
+    const normAbbr = bible_abbreviation;
+    const normBook = bible_book.toUpperCase();
+    const normChapter = bible_chapter.toString();
+
+    // Construct a reference string for logging and S3 key generation (remains the same)
     const bible_reference_log = `${normAbbr}/${normBook}/${normChapter}`;
     const s3Key = `audio/${normAbbr}/${normBook}/${normChapter}.mp3`; // S3 key format without lang
 
-    console.log(`POST /audio-bible request received for: ${bible_reference_log}`);
+    console.log(`POST /audio-bible request received for: ${bible_reference_log} with lang: ${bible_lang}`);
 
     let dbClient;
     const tempDir = os.tmpdir();
