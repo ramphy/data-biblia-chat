@@ -23,7 +23,7 @@ console.log("S3 Client configured for Backblaze B2 in audio_utils.js.");
 
 // --- Constants ---
 const SPEECHIFY_API_URL = "https://audio.api.speechify.com/generateAudioFiles";
-const SPEECHIFY_CHAR_LIMIT = 2900; // Set back to original requirement
+const SPEECHIFY_CHAR_LIMIT = 10; // Set back to original requirement
 
 /**
  * Splits text into chunks respecting the character limit, breaking at spaces.
