@@ -410,7 +410,7 @@ router.post('/audio-bible', async (req, res) => {
         console.log(`DB record inserted/updated for ${bible_reference_log}.`);
 
         // 8. Return S3 URL
-        return res.json({ s3_url: s3Url });
+        return res.json({ audio_url: s3Url });
 
     } catch (error) {
         console.error(`Error processing POST /audio-bible request for ${bible_reference_log}:`, error);

@@ -11,7 +11,7 @@ const dbConfig = {
 };
 
 const TableQuerys = `
--- Drop existing table if it exists to ensure schema update (optional, be careful with existing data)
+-- 
 -- DROP TABLE IF EXISTS audio_biblia;
 
 CREATE TABLE IF NOT EXISTS audio_biblia (
