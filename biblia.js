@@ -164,7 +164,8 @@ router.get('/:lang/:bible_abbreviation/:bible_book/:bible_chapter', async (req, 
                     locale: pageProps.locale,
                     content: finalContent, // Use the processed content
                     previous_chapter: pageProps.chapterInfo?.previous,
-                    next_chapter: pageProps.chapterInfo?.next
+                    next_chapter: pageProps.chapterInfo?.next,
+                    copyright: pageProps.chapterInfo?.copyright.text
                   };
 
                  console.log(`Attempt ${attempt}: Successfully fetched and processed data.`);
