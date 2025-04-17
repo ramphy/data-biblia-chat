@@ -1,7 +1,6 @@
 const express = require('express');
 const axios = require('axios');
 const cheerio = require('cheerio');
-const { Pool } = require('pg');
 const os = require('os');
 const path = require('path');
 const fs = require('fs').promises; // Added fs.promises for async file operations
@@ -15,29 +14,10 @@ const {
     checkJsonExists,
     getJsonFromS3,
     SPEECHIFY_CHAR_LIMIT
-} = require('./audio_utils'); // Import audio utilities
+} = require('./utils'); // Import audio utilities
 
 const router = express.Router();
 
-// --- Database Configuration ---
-// WARNING: Hardcoding credentials is not recommended for production. Use environment variables.
-const pool = new Pool({
-  host: 'portainer.beta.redmasiva.com',
-  user: 'data-biblia-chat',
-  database: 'data-biblia-chat',
-  password: 'Ramphy123;;', // Ensure this is correct
-  port: 5432,
-  max: 10, // Example: Set max connections in pool
-  idleTimeoutMillis: 30000, // Example: Close idle clients after 30s
-  connectionTimeoutMillis: 2000, // Example: Return error if connection takes >2s
-});
-
-pool.on('error', (err, client) => {
-  console.error('Unexpected error on idle client', err);
-  process.exit(-1); // Exit if pool encounters critical error
-});
-
-console.log("PostgreSQL Pool configured for biblia.js.");
 
 // Mapping from Bible abbreviation to ID
 const bibleVersionMap = {
@@ -504,15 +484,8 @@ router.post('/audio-bible', async (req, res) => {
         const s3Url = await uploadToS3(s3Key, finalAudioPath, 'audio/mpeg');
         // finalAudioPath is deleted by uploadToS3 on success/error
 
-        // 7. Save Record to Database using individual fields (excluding lang)
-        console.log(`Inserting record into DB: ${normAbbr}, ${normBook}, ${normChapter}, ${s3Url}`);
-        await dbClient.query(
-            `INSERT INTO audio_biblia (bible_abbreviation, bible_book, bible_chapter, s3_url)
-             VALUES ($1, $2, $3, $4)
-             ON CONFLICT (bible_abbreviation, bible_book, bible_chapter) DO NOTHING`, // Use updated unique constraint
-            [normAbbr, normBook, normChapter, s3Url]
-        );
-        console.log(`DB record inserted/updated for ${bible_reference_log}.`);
+        // 7. Log the audio generation (removed database insertion)
+        console.log(`Audio generated for ${bible_reference_log}: ${s3Url}`);
 
         // 8. Return S3 URL
         return res.json({ audio_url: s3Url });
@@ -528,10 +501,6 @@ router.post('/audio-bible', async (req, res) => {
         }
         return res.status(500).json({ error: `Failed to generate audio: ${error.message}` });
     } finally {
-        if (dbClient) {
-            dbClient.release(); // Release client back to the pool
-            console.log(`DB client released for ${bible_reference_log} POST request.`);
-        }
     }
 });
 
@@ -583,8 +552,7 @@ router.get('/:lang/:bible_abbreviation', async (req, res) => {
                 console.log(`Attempt ${attempt}: Successfully fetched version data.`);
                 // Extract version data
                 const pageProps = versionResponse.data.pageProps;
-                // Return structured version data
-                return res.json({
+                const versionData = {
                     title: pageProps.version.title,
                     usfm: pageProps.version.abbreviation,
                     books: pageProps.version.books,
@@ -600,7 +568,21 @@ router.get('/:lang/:bible_abbreviation', async (req, res) => {
                         text: pageProps.versionData?.reader_footer?.text,
                         url: pageProps.versionData?.reader_footer_url
                     }]
-                });
+                };
+
+                // Save to S3 cache for future requests
+                try {
+                    const s3Key = `versions/${lang}/${bible_abbreviation}.json`;
+                    const tempFilePath = path.join(os.tmpdir(), `${uuidv4()}.json`);
+                    await fs.writeFile(tempFilePath, JSON.stringify(versionData));
+                    await uploadToS3(s3Key, tempFilePath, 'application/json');
+                    console.log(`Successfully cached version data in S3 with key: ${s3Key}`);
+                } catch (s3Error) {
+                    console.error('Error saving to S3 cache:', s3Error.message);
+                    // Continue with response even if S3 save fails
+                }
+
+                return res.json(versionData);
             } else {
                 console.warn(`Attempt ${attempt}: Received unexpected data structure for version info.`);
                 throw new Error('Unexpected data structure received from Bible API for version info.');

@@ -19,7 +19,7 @@ const s3Config = {
 const s3Client = new S3Client(s3Config);
 const s3BucketName = "data-biblia-chat";
 
-// console.log("S3 Client configured for Backblaze B2 in audio_utils.js.");
+// console.log("S3 Client configured for Backblaze B2 in utils.js.");
 
 // --- Constants ---
 const SPEECHIFY_API_URL = "https://audio.api.speechify.com/generateAudioFiles";
