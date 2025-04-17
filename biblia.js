@@ -213,7 +213,7 @@ router.get('/versions', async (req, res) => {
         if (exists) {
             console.log(`Found cached versions configuration in S3 for key: ${s3Key}`);
             const cachedData = await getJsonFromS3(s3Key);
-            return res.json({ cachedData });
+            return res.json(cachedData );
         }
     } catch (s3Error) {
         console.error(`Error checking S3 cache for key ${s3Key}:`, s3Error.message);
