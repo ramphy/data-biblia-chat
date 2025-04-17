@@ -522,7 +522,7 @@ router.get('/:lang/:bible_abbreviation', async (req, res) => {
     console.log(`Request received for version info: ${lang}/${bible_abbreviation} (ID: ${bible_id})`);
 
     // First try to get from S3 cache
-    const s3Key = `versions/${lang}/${bible_abbreviation}.json`;
+                    const s3Key = `versions/${bible_abbreviation}.json`; // Eliminamos el idioma de la clave S3
     try {
         const exists = await checkJsonExists(s3Key);
         if (exists) {
@@ -589,7 +589,7 @@ router.get('/:lang/:bible_abbreviation', async (req, res) => {
 
                 // Save to S3 cache for future requests
                 try {
-                    const s3Key = `versions/${lang}/${bible_abbreviation}.json`;
+                    const s3Key = `versions/${bible_abbreviation}.json`; // Eliminamos el idioma de la clave S3
                     const tempFilePath = path.join(os.tmpdir(), `${uuidv4()}.json`);
                     await fs.writeFile(tempFilePath, JSON.stringify(versionData));
                     await uploadToS3(s3Key, tempFilePath, 'application/json');
