@@ -16,7 +16,9 @@ async function testRoute(description, testFn) {
 
 // Test 1: Get Bible chapter
 testRoute('GET Bible chapter', async () => {
-  const response = await axios.get(`${API_BASE}/es/RVR1960/GEN/1`);
+  const url = `${API_BASE}/es/RVR1960/GEN/1`;
+  console.log('GET URL:', url);
+  const response = await axios.get(url);
   if (!response.data || !response.data.title || !Array.isArray(response.data.content)) {
     throw new Error('Invalid response structure');
   }
@@ -39,7 +41,9 @@ testRoute('POST Generate audio Bible', async () => {
 
 // Test 3: Get Bible version info
 testRoute('GET Bible version info', async () => {
-  const response = await axios.get(`${API_BASE}/es/RVR1960`);
+  const url = `${API_BASE}/es/RVR1960`;
+  console.log('GET URL:', url);
+  const response = await axios.get(url);
   if (!response.data || !response.data.title || !Array.isArray(response.data.books)) {
     throw new Error('Invalid version info structure');
   }
@@ -48,7 +52,9 @@ testRoute('GET Bible version info', async () => {
 
 // Test 4: Get all versions by language
 testRoute('GET All versions by language', async () => {
-  const response = await axios.get(`${API_BASE}/es`);
+  const url = `${API_BASE}/es`;
+  console.log('GET URL:', url);
+  const response = await axios.get(url);
   if (!response.data || !Array.isArray(response.data.versions)) {
     throw new Error('Invalid versions list structure');
   }
@@ -57,7 +63,9 @@ testRoute('GET All versions by language', async () => {
 
 // Test 5: Get versions configuration
 testRoute('GET Versions configuration', async () => {
-  const response = await axios.get(`${API_BASE}/versions`);
+  const url = `${API_BASE}/versions`;
+  console.log('GET URL:', url);
+  const response = await axios.get(url);
   if (!response.data || !response.data.data) {
     throw new Error('Invalid versions configuration structure');
   }
