@@ -67,10 +67,5 @@ testRoute('GET Versions configuration', async () => {
 // Run all tests
 (async () => {
   console.log('Starting API tests...'.bold);
-  await testRoute('GET Bible chapter');
-  await testRoute('POST Generate audio Bible'); 
-  await testRoute('GET Bible version info');
-  await testRoute('GET All versions by language');
-  await testRoute('GET Versions configuration');
   console.log('\nAll tests completed'.bold);
 })();

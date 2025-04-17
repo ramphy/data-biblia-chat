@@ -18,6 +18,20 @@ const {
 
 const router = express.Router();
 
+// Simple mapping from ISO 639-1 (2-letter) to ISO 639-3 (3-letter) codes
+const langCodeMap = {
+    'es': 'spa', // Spanish
+    'en': 'eng', // English
+    'pt': 'por', // Portuguese
+    'fr': 'fra', // French
+    'de': 'deu', // German
+    'it': 'ita', // Italian
+    'ru': 'rus', // Russian
+    'zh': 'zho', // Chinese (generic) - Note: Bible.com might use more specific tags like cmn, yue
+    'ja': 'jpn', // Japanese
+    'ko': 'kor', // Korean
+    // Add more mappings as needed
+};
 
 // Mapping from Bible abbreviation to ID
 const bibleVersionMap = {
@@ -62,6 +76,184 @@ async function getBuildId() {
     }
     return currentBuildId;
 }
+
+// Function to parse Bible HTML content into JSON using Cheerio (Updated to handle multiple structures)
+function parseBibleHtmlToJson(htmlString) {
+    const $ = cheerio.load(htmlString);
+    const result = {};
+
+    // Extract version info (remains the same)
+    const versionDiv = $('div.version');
+    result.version = {
+        id: versionDiv.data('vid')?.toString(),
+        language: versionDiv.data('iso6393')
+    };
+
+    // Extract book info (remains the same)
+    const bookDiv = $('div.book');
+    const bookClass = bookDiv.attr('class')?.split(' ').find(cls => cls.startsWith('bk'));
+    result.book = {
+        code: bookClass ? bookClass.substring(2) : null,
+        chapters: []
+    };
+
+    // Extract chapter info
+    const chapterDiv = $('div.chapter');
+    const chapterClass = chapterDiv.attr('class')?.split(' ').find(cls => cls.startsWith('ch'));
+    const chapterData = {
+        number: chapterClass ? parseInt(chapterClass.substring(2), 10) : null,
+        usfm: chapterDiv.data('usfm'),
+        content: [] // Holds headings, paragraphs, etc.
+    };
+
+    // Iterate over main content blocks: headings (s, s1), paragraphs (p), quotes (q), references (r), and the new blocks (m, li1)
+    // This makes it potentially backward compatible if older formats are encountered.
+    chapterDiv.children('div.s, div.s1, div.p, div.q, div.r, div.m, div.li1').each((_, element) => {
+        const $element = $(element);
+
+        if ($element.hasClass('s') || $element.hasClass('s1')) { // Section heading (s or s1)
+            chapterData.content.push({
+                type: 'heading',
+                text: $element.find('span.heading').text().trim()
+            });
+        } else if ($element.hasClass('r')) { // Reference heading
+             // Handle potential multiple heading spans within 'r'
+            chapterData.content.push({
+                type: 'reference',
+                text: $element.find('span.heading').map((i, el) => $(el).text()).get().join('').trim()
+            });
+        } else if ($element.hasClass('p') || $element.hasClass('q') || $element.hasClass('m') || $element.hasClass('li1')) {
+            // Treat p, q, m, li1 as paragraph-like blocks containing verses
+            const blockType = ($element.hasClass('q')) ? 'quote_line' : 'paragraph'; // Keep quote_line distinction if q is present
+            const currentBlock = {
+                type: blockType,
+                verses: []
+            };
+
+            // Find verses within this block
+            $element.find('span.verse').each((i, verseElement) => {
+                const $verse = $(verseElement);
+                const currentUsfm = $verse.data('usfm');
+                const currentNumberStr = $verse.children('span.label').first().text(); // Get label text
+                const currentNumber = currentNumberStr ? parseInt(currentNumberStr, 10) : null; // Parse label
+
+                // Extract text: Concatenate text from all direct child span.content elements
+                let currentText = $verse.children('span.content')
+                                     .map((idx, contentSpan) => $(contentSpan).text()) // Get text of each content span
+                                     .get() // Get as an array of strings
+                                     .join(' ') // Join with space (or newline if preferred: '\n')
+                                     .replace(/\s+/g, ' ') // Normalize whitespace
+                                     .trim(); // Trim start/end
+
+                 // Fallback if no span.content, get text directly from verse span excluding children (less common now?)
+                 if (!currentText && $verse.children('span.content').length === 0) {
+                    currentText = $verse.clone().children().remove().end().text().trim();
+                 }
+
+                // Extract notes (remains similar)
+                const currentNotes = [];
+                $verse.find('span.note').each((j, noteElement) => {
+                    const $note = $(noteElement);
+                    // Extract note body text more carefully
+                    const noteBody = $note.find('span.body').text().replace(/\s+/g, ' ').trim();
+                    currentNotes.push({
+                        // Determine type based on class (f, x, etc.) - adapt if needed
+                        type: $note.attr('class')?.split(' ').find(c => c !== 'note'),
+                        label: $note.find('span.label').text(),
+                        body: noteBody
+                    });
+                });
+
+                // Add verse to the current block if it has content
+                if (currentText || currentNotes.length > 0 || (currentNumber !== null && !isNaN(currentNumber))) {
+                     // Basic merging: If the last verse in the block has the same USFM, append text/notes (less likely needed now?)
+                     // This simple check might need refinement if complex merging is required across blocks.
+                     const lastVerse = currentBlock.verses[currentBlock.verses.length - 1];
+                     if (lastVerse && lastVerse.usfm === currentUsfm) {
+                         if (currentText) {
+                             lastVerse.text += (lastVerse.text ? ' ' : '') + currentText; // Append text
+                         }
+                         lastVerse.notes.push(...currentNotes);
+                         // Update number if the current one is valid and the existing one wasn't
+                         if ((lastVerse.number === null || isNaN(lastVerse.number)) && (currentNumber !== null && !isNaN(currentNumber))) {
+                             lastVerse.number = currentNumber;
+                         }
+                     } else {
+                         // Add new verse object
+                         currentBlock.verses.push({
+                             number: (currentNumber !== null && !isNaN(currentNumber)) ? currentNumber : null,
+                             usfm: currentUsfm,
+                             text: currentText,
+                             notes: currentNotes
+                         });
+                     }
+                }
+            }); // End verse iteration
+
+            // Add the block to chapter content only if it contains verses
+            if (currentBlock.verses.length > 0) {
+                chapterData.content.push(currentBlock);
+            }
+        } // End paragraph/quote/m/li1 block processing
+    }); // End main content block iteration
+
+    // No need for extra cleanup if blocks are only added when they have verses
+
+    result.book.chapters.push(chapterData);
+    return result;
+}
+
+// Route handler for fetching all versions configuration
+router.get('/versions', async (req, res) => {
+    const s3Key = `versions/index.json`;
+    
+    // First try to get from S3 cache
+    try {
+        const exists = await checkJsonExists(s3Key);
+        if (exists) {
+            console.log(`Found cached versions configuration in S3 for key: ${s3Key}`);
+            const cachedData = await getJsonFromS3(s3Key);
+            return res.json({ data: cachedData.default_versions });
+        }
+    } catch (s3Error) {
+        console.error(`Error checking S3 cache for key ${s3Key}:`, s3Error.message);
+        // Continue with normal flow if S3 check fails
+    }
+
+    try {
+        const apiUrl = 'https://www.bible.com/api/bible/configuration';
+        console.log(`Fetching versions configuration from: ${apiUrl}`);
+        
+        const response = await axios.get(apiUrl, {
+            timeout: 10000 // 10 seconds timeout
+        });
+
+        if (response.data) {
+            console.log('Successfully fetched versions configuration');
+            
+            // Save to S3 cache for future requests
+            try {
+                const tempFilePath = path.join(os.tmpdir(), `${uuidv4()}.json`);
+                await fs.writeFile(tempFilePath, JSON.stringify(response.data));
+                await uploadToS3(s3Key, tempFilePath, 'application/json');
+                console.log(`Successfully cached versions configuration in S3 with key: ${s3Key}`);
+            } catch (s3Error) {
+                console.error('Error saving to S3 cache:', s3Error.message);
+                // Continue with response even if S3 save fails
+            }
+
+            return res.json({ data: response.data.default_versions });
+        } else {
+            console.warn('Received empty or unexpected data structure for versions configuration');
+            return res.status(404).json({ error: 'No versions configuration found' });
+        }
+    } catch (error) {
+        console.error(`Failed to fetch versions configuration: ${error.message}`);
+        const statusCode = error.response ? error.response.status : 500;
+        const errorMessage = `Failed to retrieve versions configuration. ${error.message}`;
+        return res.status(statusCode).json({ error: errorMessage });
+    }
+});
 
 // Route handler for fetching Bible chapter data using abbreviation
 router.get('/:lang/:bible_abbreviation/:bible_book/:bible_chapter', async (req, res) => {
@@ -220,133 +412,6 @@ router.get('/:lang/:bible_abbreviation/:bible_book/:bible_chapter', async (req, 
         attempt++; // Increment attempt counter for the loop
     }
 });
-
-// Function to parse Bible HTML content into JSON using Cheerio (Updated to handle multiple structures)
-function parseBibleHtmlToJson(htmlString) {
-    const $ = cheerio.load(htmlString);
-    const result = {};
-
-    // Extract version info (remains the same)
-    const versionDiv = $('div.version');
-    result.version = {
-        id: versionDiv.data('vid')?.toString(),
-        language: versionDiv.data('iso6393')
-    };
-
-    // Extract book info (remains the same)
-    const bookDiv = $('div.book');
-    const bookClass = bookDiv.attr('class')?.split(' ').find(cls => cls.startsWith('bk'));
-    result.book = {
-        code: bookClass ? bookClass.substring(2) : null,
-        chapters: []
-    };
-
-    // Extract chapter info
-    const chapterDiv = $('div.chapter');
-    const chapterClass = chapterDiv.attr('class')?.split(' ').find(cls => cls.startsWith('ch'));
-    const chapterData = {
-        number: chapterClass ? parseInt(chapterClass.substring(2), 10) : null,
-        usfm: chapterDiv.data('usfm'),
-        content: [] // Holds headings, paragraphs, etc.
-    };
-
-    // Iterate over main content blocks: headings (s, s1), paragraphs (p), quotes (q), references (r), and the new blocks (m, li1)
-    // This makes it potentially backward compatible if older formats are encountered.
-    chapterDiv.children('div.s, div.s1, div.p, div.q, div.r, div.m, div.li1').each((_, element) => {
-        const $element = $(element);
-
-        if ($element.hasClass('s') || $element.hasClass('s1')) { // Section heading (s or s1)
-            chapterData.content.push({
-                type: 'heading',
-                text: $element.find('span.heading').text().trim()
-            });
-        } else if ($element.hasClass('r')) { // Reference heading
-             // Handle potential multiple heading spans within 'r'
-            chapterData.content.push({
-                type: 'reference',
-                text: $element.find('span.heading').map((i, el) => $(el).text()).get().join('').trim()
-            });
-        } else if ($element.hasClass('p') || $element.hasClass('q') || $element.hasClass('m') || $element.hasClass('li1')) {
-            // Treat p, q, m, li1 as paragraph-like blocks containing verses
-            const blockType = ($element.hasClass('q')) ? 'quote_line' : 'paragraph'; // Keep quote_line distinction if q is present
-            const currentBlock = {
-                type: blockType,
-                verses: []
-            };
-
-            // Find verses within this block
-            $element.find('span.verse').each((i, verseElement) => {
-                const $verse = $(verseElement);
-                const currentUsfm = $verse.data('usfm');
-                const currentNumberStr = $verse.children('span.label').first().text(); // Get label text
-                const currentNumber = currentNumberStr ? parseInt(currentNumberStr, 10) : null; // Parse label
-
-                // Extract text: Concatenate text from all direct child span.content elements
-                let currentText = $verse.children('span.content')
-                                     .map((idx, contentSpan) => $(contentSpan).text()) // Get text of each content span
-                                     .get() // Get as an array of strings
-                                     .join(' ') // Join with space (or newline if preferred: '\n')
-                                     .replace(/\s+/g, ' ') // Normalize whitespace
-                                     .trim(); // Trim start/end
-
-                 // Fallback if no span.content, get text directly from verse span excluding children (less common now?)
-                 if (!currentText && $verse.children('span.content').length === 0) {
-                    currentText = $verse.clone().children().remove().end().text().trim();
-                 }
-
-                // Extract notes (remains similar)
-                const currentNotes = [];
-                $verse.find('span.note').each((j, noteElement) => {
-                    const $note = $(noteElement);
-                    // Extract note body text more carefully
-                    const noteBody = $note.find('span.body').text().replace(/\s+/g, ' ').trim();
-                    currentNotes.push({
-                        // Determine type based on class (f, x, etc.) - adapt if needed
-                        type: $note.attr('class')?.split(' ').find(c => c !== 'note'),
-                        label: $note.find('span.label').text(),
-                        body: noteBody
-                    });
-                });
-
-                // Add verse to the current block if it has content
-                if (currentText || currentNotes.length > 0 || (currentNumber !== null && !isNaN(currentNumber))) {
-                     // Basic merging: If the last verse in the block has the same USFM, append text/notes (less likely needed now?)
-                     // This simple check might need refinement if complex merging is required across blocks.
-                     const lastVerse = currentBlock.verses[currentBlock.verses.length - 1];
-                     if (lastVerse && lastVerse.usfm === currentUsfm) {
-                         if (currentText) {
-                             lastVerse.text += (lastVerse.text ? ' ' : '') + currentText; // Append text
-                         }
-                         lastVerse.notes.push(...currentNotes);
-                         // Update number if the current one is valid and the existing one wasn't
-                         if ((lastVerse.number === null || isNaN(lastVerse.number)) && (currentNumber !== null && !isNaN(currentNumber))) {
-                             lastVerse.number = currentNumber;
-                         }
-                     } else {
-                         // Add new verse object
-                         currentBlock.verses.push({
-                             number: (currentNumber !== null && !isNaN(currentNumber)) ? currentNumber : null,
-                             usfm: currentUsfm,
-                             text: currentText,
-                             notes: currentNotes
-                         });
-                     }
-                }
-            }); // End verse iteration
-
-            // Add the block to chapter content only if it contains verses
-            if (currentBlock.verses.length > 0) {
-                chapterData.content.push(currentBlock);
-            }
-        } // End paragraph/quote/m/li1 block processing
-    }); // End main content block iteration
-
-    // No need for extra cleanup if blocks are only added when they have verses
-
-    result.book.chapters.push(chapterData);
-    return result;
-}
-
 
 // --- New POST Audio Bible Endpoint ---
 router.post('/audio-bible', async (req, res) => {
@@ -627,21 +692,6 @@ router.get('/:lang/:bible_abbreviation', async (req, res) => {
     }
 });
 
-// Simple mapping from ISO 639-1 (2-letter) to ISO 639-3 (3-letter) codes
-const langCodeMap = {
-    'es': 'spa', // Spanish
-    'en': 'eng', // English
-    'pt': 'por', // Portuguese
-    'fr': 'fra', // French
-    'de': 'deu', // German
-    'it': 'ita', // Italian
-    'ru': 'rus', // Russian
-    'zh': 'zho', // Chinese (generic) - Note: Bible.com might use more specific tags like cmn, yue
-    'ja': 'jpn', // Japanese
-    'ko': 'kor', // Korean
-    // Add more mappings as needed
-};
-
 // Route handler for fetching all versions by language (defined last to avoid conflict)
 // Accepts ISO 639-1 (e.g., 'es') and converts to ISO 639-3 (e.g., 'spa') for the API call
 router.get('/:lang', async (req, res) => {
@@ -710,59 +760,6 @@ router.get('/:lang', async (req, res) => {
     } else {
         console.log(`Parameter '${langParam}' doesn't look like a valid 2-letter language code. Sending 400.`);
         return res.status(400).json({ error: `Invalid language parameter format: ${langParam}. Expected 2-letter ISO 639-1 code.` });
-    }
-});
-
-
-// Route handler for fetching all versions configuration
-router.get('/versions', async (req, res) => {
-    const s3Key = `versions/index.json`;
-    
-    // First try to get from S3 cache
-    try {
-        const exists = await checkJsonExists(s3Key);
-        if (exists) {
-            console.log(`Found cached versions configuration in S3 for key: ${s3Key}`);
-            const cachedData = await getJsonFromS3(s3Key);
-            return res.json({ data: cachedData.default_versions });
-        }
-    } catch (s3Error) {
-        console.error(`Error checking S3 cache for key ${s3Key}:`, s3Error.message);
-        // Continue with normal flow if S3 check fails
-    }
-
-    try {
-        const apiUrl = 'https://www.bible.com/api/bible/configuration';
-        console.log(`Fetching versions configuration from: ${apiUrl}`);
-        
-        const response = await axios.get(apiUrl, {
-            timeout: 10000 // 10 seconds timeout
-        });
-
-        if (response.data) {
-            console.log('Successfully fetched versions configuration');
-            
-            // Save to S3 cache for future requests
-            try {
-                const tempFilePath = path.join(os.tmpdir(), `${uuidv4()}.json`);
-                await fs.writeFile(tempFilePath, JSON.stringify(response.data));
-                await uploadToS3(s3Key, tempFilePath, 'application/json');
-                console.log(`Successfully cached versions configuration in S3 with key: ${s3Key}`);
-            } catch (s3Error) {
-                console.error('Error saving to S3 cache:', s3Error.message);
-                // Continue with response even if S3 save fails
-            }
-
-            return res.json({ data: response.data.default_versions });
-        } else {
-            console.warn('Received empty or unexpected data structure for versions configuration');
-            return res.status(404).json({ error: 'No versions configuration found' });
-        }
-    } catch (error) {
-        console.error(`Failed to fetch versions configuration: ${error.message}`);
-        const statusCode = error.response ? error.response.status : 500;
-        const errorMessage = `Failed to retrieve versions configuration. ${error.message}`;
-        return res.status(statusCode).json({ error: errorMessage });
     }
 });
 
