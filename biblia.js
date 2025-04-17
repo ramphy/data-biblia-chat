@@ -307,7 +307,7 @@ router.get('/versions/:lang', async (req, res) => {
                 // Save to S3 cache for future requests
                 try {
                     const tempFilePath = path.join(os.tmpdir(), `${uuidv4()}.json`);
-                    await fs.writeFile(tempFilePath, JSON.stringify(response.data.response.data));
+                    await fs.writeFile(tempFilePath, JSON.stringify({data: response.data.response.data}));
                     await uploadToS3(s3Key, tempFilePath, 'application/json');
                     console.log(`Successfully cached versions in S3 with key: ${s3Key}`);
                 } catch (s3Error) {
@@ -315,7 +315,7 @@ router.get('/versions/:lang', async (req, res) => {
                     // Continue with response even if S3 save fails
                 }
 
-                return res.json(response.data.response.data);
+                return res.json({data: response.data.response.data});
             } else {
                 console.warn(`Received empty or unexpected data structure for versions language: ${langParam}`);
                 return res.status(404).json({ error: `No versions found for language tag: ${langParam}` });
@@ -448,7 +448,7 @@ router.get('/:lang/:bible_abbreviation/:bible_book/:bible_chapter', async (req, 
                  try {
                      const s3Key = `text/${bible_abbreviation}/${bible_book.toUpperCase()}/${bible_chapter}.json`;
                      const tempFilePath = path.join(os.tmpdir(), `${uuidv4()}.json`);
-                     await fs.writeFile(tempFilePath, JSON.stringify(simplifiedResponse));
+                     await fs.writeFile(tempFilePath, JSON.stringify({data: simplifiedResponse}));
                      await uploadToS3(s3Key, tempFilePath, 'application/json');
                      console.log(`Successfully cached response in S3 with key: ${s3Key}`);
                  } catch (s3Error) {
@@ -456,7 +456,7 @@ router.get('/:lang/:bible_abbreviation/:bible_book/:bible_chapter', async (req, 
                      // Continue with response even if S3 save fails
                  }
                  
-                 return res.json(simplifiedResponse); // Send the simplified response
+                 return res.json({data: simplifiedResponse}); // Send the simplified response
             } else {
                  // If response is OK but data is unexpected, treat as an error for retry
                  console.warn(`Attempt ${attempt}: Received unexpected data structure.`);
@@ -736,7 +736,7 @@ router.get('/:lang/:bible_abbreviation', async (req, res) => {
                 try {
                     const s3Key = `versions/${bible_abbreviation}.json`; // Eliminamos el idioma de la clave S3
                     const tempFilePath = path.join(os.tmpdir(), `${uuidv4()}.json`);
-                    await fs.writeFile(tempFilePath, JSON.stringify(versionData));
+                    await fs.writeFile(tempFilePath, JSON.stringify({data: versionData }));
                     await uploadToS3(s3Key, tempFilePath, 'application/json');
                     console.log(`Successfully cached version data in S3 with key: ${s3Key}`);
                 } catch (s3Error) {
@@ -744,7 +744,7 @@ router.get('/:lang/:bible_abbreviation', async (req, res) => {
                     // Continue with response even if S3 save fails
                 }
 
-                return res.json(versionData);
+                return res.json({data: versionData });
             } else {
                 console.warn(`Attempt ${attempt}: Received unexpected data structure for version info.`);
                 throw new Error('Unexpected data structure received from Bible API for version info.');
