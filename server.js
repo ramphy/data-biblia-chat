@@ -1,8 +1,12 @@
 const express = require('express');
+const cors = require('cors');
 const bibliaRoutes = require('./biblia'); // Import the new Bible routes
 require('dotenv').config(); // Load environment variables from .env file
 
 const app = express();
+
+// Enable CORS for all origins
+app.use(cors());
 const port = 1020; // Use port from .env or default to 3000
 
 // Middleware to parse JSON bodies
