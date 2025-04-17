@@ -277,7 +277,7 @@ router.get('/versions/:lang', async (req, res) => {
         }
 
         // First try to get from S3 cache
-        const s3Key = `versions/${langParam}.json`;
+        const s3Key = `versions/${langParam}/index.json`;
         try {
             const exists = await checkJsonExists(s3Key);
             if (exists) {
@@ -307,7 +307,7 @@ router.get('/versions/:lang', async (req, res) => {
                 // Save to S3 cache for future requests
                 try {
                     const tempFilePath = path.join(os.tmpdir(), `${uuidv4()}.json`);
-                    await fs.writeFile(tempFilePath, JSON.stringify(response.data));
+                    await fs.writeFile(tempFilePath, JSON.stringify(response.data.response.data));
                     await uploadToS3(s3Key, tempFilePath, 'application/json');
                     console.log(`Successfully cached versions in S3 with key: ${s3Key}`);
                 } catch (s3Error) {
@@ -315,7 +315,7 @@ router.get('/versions/:lang', async (req, res) => {
                     // Continue with response even if S3 save fails
                 }
 
-                return res.json(response.data);
+                return res.json(response.data.response.data);
             } else {
                 console.warn(`Received empty or unexpected data structure for versions language: ${langParam}`);
                 return res.status(404).json({ error: `No versions found for language tag: ${langParam}` });
@@ -664,7 +664,7 @@ router.get('/:lang/:bible_abbreviation', async (req, res) => {
     console.log(`Request received for version info: ${lang}/${bible_abbreviation} (ID: ${bible_id})`);
 
     // First try to get from S3 cache
-                    const s3Key = `versions/${bible_abbreviation}.json`; // Guardamos en la ruta correcta con el idioma
+                    const s3Key = `versions/${lang}/${bible_abbreviation}.json`; // Guardamos en la ruta correcta con el idioma
     try {
         const exists = await checkJsonExists(s3Key);
         if (exists) {
