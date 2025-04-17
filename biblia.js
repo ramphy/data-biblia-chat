@@ -182,10 +182,10 @@ router.get('/:lang/:bible_abbreviation/:bible_book/:bible_chapter', async (req, 
                     content: finalContent, // Use the processed content
                     previous_chapter: pageProps.chapterInfo?.previous,
                     next_chapter: pageProps.chapterInfo?.next,
-                    copyright: pageProps.chapterInfo?.copyright.text,
                     language: pageProps.versionData?.language?.iso_639_1,
                     direction: pageProps.versionData?.language?.text_direction,
                     publisher: pageProps.versionData?.publisher?.name,
+                    copyright: pageProps.chapterInfo?.copyright.text,
                     notes: [{
                       text: pageProps.versionData?.reader_footer?.text,
                       url: pageProps.versionData?.reader_footer_url
@@ -552,6 +552,20 @@ router.get('/:lang/:bible_abbreviation', async (req, res) => {
 
     console.log(`Request received for version info: ${lang}/${bible_abbreviation} (ID: ${bible_id})`);
 
+    // First try to get from S3 cache
+    const s3Key = `versions/${lang}/${bible_abbreviation}.json`;
+    try {
+        const exists = await checkJsonExists(s3Key);
+        if (exists) {
+            console.log(`Found cached version info in S3 for key: ${s3Key}`);
+            const cachedData = await getJsonFromS3(s3Key);
+            return res.json(cachedData);
+        }
+    } catch (s3Error) {
+        console.error(`Error checking S3 cache for key ${s3Key}:`, s3Error.message);
+        // Continue with normal flow if S3 check fails
+    }
+
     let attempt = 1;
     while (attempt <= 2) { // Allow one initial attempt and one retry
         try {
@@ -567,8 +581,26 @@ router.get('/:lang/:bible_abbreviation', async (req, res) => {
             // Check if the response looks valid and contains the required data
             if (versionResponse.data && versionResponse.data.pageProps && versionResponse.data.pageProps.version) {
                 console.log(`Attempt ${attempt}: Successfully fetched version data.`);
-                // Return only the pageProps.version object
-                return res.json(versionResponse.data.pageProps.version);
+                // Extract version data
+                const pageProps = versionResponse.data.pageProps;
+                // Return structured version data
+                return res.json({
+                    title: pageProps.version.title,
+                    usfm: pageProps.version.abbreviation,
+                    books: pageProps.version.books,
+                    language: pageProps.version?.language?.iso_639_1,
+                    direction: pageProps.version?.language?.text_direction,
+                    publisher: [{
+                        name: pageProps.version?.publisher?.name,
+                        description: pageProps.version?.publisher?.description,
+                        url: pageProps.version?.publisher?.url
+                    }],
+                    copyright: pageProps.chapterInfo?.copyright.text,
+                    notes: [{
+                        text: pageProps.versionData?.reader_footer?.text,
+                        url: pageProps.versionData?.reader_footer_url
+                    }]
+                });
             } else {
                 console.warn(`Attempt ${attempt}: Received unexpected data structure for version info.`);
                 throw new Error('Unexpected data structure received from Bible API for version info.');
