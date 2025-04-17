@@ -341,7 +341,7 @@ router.get('/versions/:lang', async (req, res) => {
 });
 
 // Route handler for fetching Bible chapter data using abbreviation
-router.get('/:lang/:bible_abbreviation/:bible_book/:bible_chapter', async (req, res) => {
+router.get('/:bible_abbreviation/:bible_book/:bible_chapter', async (req, res) => {
     const { lang, bible_abbreviation, bible_book, bible_chapter } = req.params;
 
     // Look up the bible_id from the abbreviation
@@ -354,7 +354,7 @@ router.get('/:lang/:bible_abbreviation/:bible_book/:bible_chapter', async (req, 
 
     const bible_id_json = `${bible_id}.json`; // Construct the JSON filename using the found ID
 
-    console.log(`Request received for: ${lang}/${bible_abbreviation} (ID: ${bible_id})/${bible_book}/${bible_chapter}`);
+    console.log(`Request received for: ${bible_abbreviation} (ID: ${bible_id})/${bible_book}/${bible_chapter}`);
 
     // First try to get from S3 cache
     const s3Key = `text/${bible_abbreviation}/${bible_book.toUpperCase()}/${bible_chapter}.json`;
@@ -375,7 +375,7 @@ router.get('/:lang/:bible_abbreviation/:bible_book/:bible_chapter', async (req, 
         try {
             const buildId = await getBuildId(); // Get current or fetch new BUILD_ID
             // Use the looked-up bible_id and ensure bible_book is uppercase in the API URL
-            const apiUrl = `https://www.bible.com/_next/data/${buildId}/${lang}/bible/${bible_id}/${bible_book.toUpperCase()}.${bible_chapter}.${bible_abbreviation}.json?versionId=${bible_id}&usfm=${bible_book.toUpperCase()}.${bible_chapter}.${bible_abbreviation}`;
+            const apiUrl = `https://www.bible.com/_next/data/${buildId}/es/bible/${bible_id}/${bible_book.toUpperCase()}.${bible_chapter}.${bible_abbreviation}.json?versionId=${bible_id}&usfm=${bible_book.toUpperCase()}.${bible_chapter}.${bible_abbreviation}`;
             // const apiUrl = `https://www.bible.com/_next/data/${buildId}/${lang}/bible/${bible_id}/${bible_book.toUpperCase()}.${bible_chapter}.${bible_abbreviation}.json?versionId=${bible_id}&usfm=${bible_book.toUpperCase()}.${bible_chapter}.${bible_abbreviation}`; // Also updated commented line for consistency
 
             console.log(`Attempt ${attempt}: Fetching data from ${apiUrl}`);
@@ -655,7 +655,7 @@ router.post('/audio-bible', async (req, res) => {
 });
 
 // Route handler for fetching Bible version data using abbreviation
-router.get('/:lang/:bible_abbreviation', async (req, res) => {
+router.get('/:bible_abbreviation', async (req, res) => {
     const { lang, bible_abbreviation } = req.params;
 
     // Look up the bible_id from the abbreviation
@@ -689,7 +689,7 @@ router.get('/:lang/:bible_abbreviation', async (req, res) => {
         try {
             const buildId = await getBuildId(); // Get current or fetch new BUILD_ID
             // Note the different URL structure for version info - use the looked-up bible_id
-            const apiUrl = `https://www.bible.com/_next/data/${buildId}/${lang}/versions/${bible_id_json}`;
+            const apiUrl = `https://www.bible.com/_next/data/${buildId}/es/versions/${bible_id_json}`;
 
             console.log(`Attempt ${attempt}: Fetching version data from ${apiUrl}`);
             const versionResponse = await axios.get(apiUrl, {
