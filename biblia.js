@@ -267,13 +267,20 @@ router.get('/versions', async (req, res) => {
 router.get('/versions/:lang', async (req, res) => {
     const langParam = req.params.lang.toLowerCase(); // Ensure lowercase for matching map keys
 
-    // Check if the input looks like a 2-letter ISO 639-1 code
-    if (langParam && langParam.length === 2) {
-        const lang_tag_3 = langCodeMap[langParam]; // Look up the 3-letter code
-
-        if (!lang_tag_3) {
-            console.log(`Unsupported ISO 639-1 language code received: ${langParam}`);
-            return res.status(400).json({ error: `Unsupported or unknown language code: ${langParam}. Please use a supported 2-letter ISO 639-1 code.` });
+    // Check if the input is a valid language code (2 or 3 letters)
+    if (langParam && (langParam.length === 2 || langParam.length === 3)) {
+        let lang_tag_3;
+        
+        // If 2 letters, convert to 3 letters using the mapping
+        if (langParam.length === 2) {
+            lang_tag_3 = langCodeMap[langParam];
+            if (!lang_tag_3) {
+                console.log(`Unsupported ISO 639-1 language code received: ${langParam}`);
+                return res.status(400).json({ error: `Unsupported or unknown 2-letter language code: ${langParam}. Please use a supported ISO 639-1 code.` });
+            }
+        } else {
+            // If 3 letters, use directly as ISO 639-3
+            lang_tag_3 = langParam;
         }
 
         // First try to get from S3 cache
@@ -328,8 +335,8 @@ router.get('/versions/:lang', async (req, res) => {
             return res.status(statusCode).json({ error: errorMessage });
         }
     } else {
-        console.log(`Parameter '${langParam}' doesn't look like a valid 2-letter language code. Sending 400.`);
-        return res.status(400).json({ error: `Invalid language parameter format: ${langParam}. Expected 2-letter ISO 639-1 code.` });
+        console.log(`Parameter '${langParam}' doesn't look like a valid language code. Sending 400.`);
+        return res.status(400).json({ error: `Invalid language parameter format: ${langParam}. Expected 2-letter ISO 639-1 or 3-letter ISO 639-3 code.` });
     }
 });
 
