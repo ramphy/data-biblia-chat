@@ -656,6 +656,20 @@ router.get('/:lang', async (req, res) => {
             return res.status(400).json({ error: `Unsupported or unknown language code: ${langParam}. Please use a supported 2-letter ISO 639-1 code.` });
         }
 
+        // First try to get from S3 cache
+        const s3Key = `/versions/language/${langParam}.json`;
+        try {
+            const exists = await checkJsonExists(s3Key);
+            if (exists) {
+                console.log(`Found cached versions in S3 for key: ${s3Key}`);
+                const cachedData = await getJsonFromS3(s3Key);
+                return res.json(cachedData);
+            }
+        } catch (s3Error) {
+            console.error(`Error checking S3 cache for key ${s3Key}:`, s3Error.message);
+            // Continue with normal flow if S3 check fails
+        }
+
         const apiUrl = `https://www.bible.com/api/bible/versions?language_tag=${lang_tag_3}&type=all`;
 
         console.log(`Request received for all versions in language (ISO 639-1): ${langParam}, mapped to (ISO 639-3): ${lang_tag_3}`);
@@ -668,27 +682,89 @@ router.get('/:lang', async (req, res) => {
 
             // Check if the response has data
             if (response.data) {
-                console.log(`Successfully fetched versions for language: ${langParam}`); // Use langParam
-                return res.json(response.data); // Return the API response directly
+                console.log(`Successfully fetched versions for language: ${langParam}`);
+
+                // Save to S3 cache for future requests
+                try {
+                    const tempFilePath = path.join(os.tmpdir(), `${uuidv4()}.json`);
+                    await fs.writeFile(tempFilePath, JSON.stringify(response.data));
+                    await uploadToS3(s3Key, tempFilePath, 'application/json');
+                    console.log(`Successfully cached versions in S3 with key: ${s3Key}`);
+                } catch (s3Error) {
+                    console.error('Error saving to S3 cache:', s3Error.message);
+                    // Continue with response even if S3 save fails
+                }
+
+                return res.json(response.data);
             } else {
-                console.warn(`Received empty or unexpected data structure for versions language: ${langParam}`); // Use langParam
-                // Send 404 as it's likely the language tag was invalid or had no versions
-                return res.status(404).json({ error: `No versions found for language tag: ${langParam}` }); // Use langParam
+                console.warn(`Received empty or unexpected data structure for versions language: ${langParam}`);
+                return res.status(404).json({ error: `No versions found for language tag: ${langParam}` });
             }
 
         } catch (error) {
-            console.error(`Failed to fetch versions for language ${langParam}: ${error.message}`); // Use langParam
+            console.error(`Failed to fetch versions for language ${langParam}: ${error.message}`);
             const statusCode = error.response ? error.response.status : 500;
-            const errorMessage = `Failed to retrieve Bible versions for language ${langParam}. ${error.message}`; // Use langParam
+            const errorMessage = `Failed to retrieve Bible versions for language ${langParam}. ${error.message}`;
             return res.status(statusCode).json({ error: errorMessage });
         }
     } else {
-        // If 'langParam' doesn't look like a 2-letter code
-        console.log(`Parameter '${langParam}' doesn't look like a valid 2-letter language code. Sending 400.`); // Use langParam
-        return res.status(400).json({ error: `Invalid language parameter format: ${langParam}. Expected 2-letter ISO 639-1 code.` }); // Use langParam
+        console.log(`Parameter '${langParam}' doesn't look like a valid 2-letter language code. Sending 400.`);
+        return res.status(400).json({ error: `Invalid language parameter format: ${langParam}. Expected 2-letter ISO 639-1 code.` });
     }
 });
 
+
+// Route handler for fetching all versions configuration
+router.get('/versions', async (req, res) => {
+    const s3Key = `versions/index.json`;
+    
+    // First try to get from S3 cache
+    try {
+        const exists = await checkJsonExists(s3Key);
+        if (exists) {
+            console.log(`Found cached versions configuration in S3 for key: ${s3Key}`);
+            const cachedData = await getJsonFromS3(s3Key);
+            return res.json({ data: cachedData.default_versions });
+        }
+    } catch (s3Error) {
+        console.error(`Error checking S3 cache for key ${s3Key}:`, s3Error.message);
+        // Continue with normal flow if S3 check fails
+    }
+
+    try {
+        const apiUrl = 'https://www.bible.com/api/bible/configuration';
+        console.log(`Fetching versions configuration from: ${apiUrl}`);
+        
+        const response = await axios.get(apiUrl, {
+            timeout: 10000 // 10 seconds timeout
+        });
+
+        if (response.data) {
+            console.log('Successfully fetched versions configuration');
+            
+            // Save to S3 cache for future requests
+            try {
+                const tempFilePath = path.join(os.tmpdir(), `${uuidv4()}.json`);
+                await fs.writeFile(tempFilePath, JSON.stringify(response.data));
+                await uploadToS3(s3Key, tempFilePath, 'application/json');
+                console.log(`Successfully cached versions configuration in S3 with key: ${s3Key}`);
+            } catch (s3Error) {
+                console.error('Error saving to S3 cache:', s3Error.message);
+                // Continue with response even if S3 save fails
+            }
+
+            return res.json({ data: response.data.default_versions });
+        } else {
+            console.warn('Received empty or unexpected data structure for versions configuration');
+            return res.status(404).json({ error: 'No versions configuration found' });
+        }
+    } catch (error) {
+        console.error(`Failed to fetch versions configuration: ${error.message}`);
+        const statusCode = error.response ? error.response.status : 500;
+        const errorMessage = `Failed to retrieve versions configuration. ${error.message}`;
+        return res.status(statusCode).json({ error: errorMessage });
+    }
+});
 
 module.exports = router; // Keep the original export
 // Example usage (for testing purposes, could be removed or adapted)
