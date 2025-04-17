@@ -552,10 +552,27 @@ router.get('/:lang/:bible_abbreviation', async (req, res) => {
                 console.log(`Attempt ${attempt}: Successfully fetched version data.`);
                 // Extract version data
                 const pageProps = versionResponse.data.pageProps;
+                const modifiedBooks = pageProps.version.books.map(book => {
+                    const newBook = {
+                        text: book.text,
+                        usfm: book.usfm,
+                        audio: book.audio,
+                        canon: book.canon,
+                        human: book.human
+                    };
+
+                    if (book.chapters && book.chapters.length > 0) {
+                        newBook.first_chapter = book.chapters[0];
+                        newBook.last_chapter = book.chapters[book.chapters.length - 1];
+                    }
+
+                    return newBook;
+                });
+
                 const versionData = {
                     title: pageProps.version.title,
                     usfm: pageProps.version.abbreviation,
-                    books: pageProps.version.books,
+                    books: modifiedBooks,
                     language: pageProps.version?.language?.iso_639_1,
                     direction: pageProps.version?.language?.text_direction,
                     publisher: [{
