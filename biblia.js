@@ -262,6 +262,77 @@ router.get('/versions', async (req, res) => {
     }
 });
 
+// Route handler for fetching all versions by language (defined last to avoid conflict)
+// Accepts ISO 639-1 (e.g., 'es') and converts to ISO 639-3 (e.g., 'spa') for the API call
+router.get('/versions/:lang', async (req, res) => {
+    const langParam = req.params.lang.toLowerCase(); // Ensure lowercase for matching map keys
+
+    // Check if the input looks like a 2-letter ISO 639-1 code
+    if (langParam && langParam.length === 2) {
+        const lang_tag_3 = langCodeMap[langParam]; // Look up the 3-letter code
+
+        if (!lang_tag_3) {
+            console.log(`Unsupported ISO 639-1 language code received: ${langParam}`);
+            return res.status(400).json({ error: `Unsupported or unknown language code: ${langParam}. Please use a supported 2-letter ISO 639-1 code.` });
+        }
+
+        // First try to get from S3 cache
+        const s3Key = `versions/${langParam}.json`;
+        try {
+            const exists = await checkJsonExists(s3Key);
+            if (exists) {
+                console.log(`Found cached versions in S3 for key: ${s3Key}`);
+                const cachedData = await getJsonFromS3(s3Key);
+                return res.json(cachedData);
+            }
+        } catch (s3Error) {
+            console.error(`Error checking S3 cache for key ${s3Key}:`, s3Error.message);
+            // Continue with normal flow if S3 check fails
+        }
+
+        const apiUrl = `https://www.bible.com/api/bible/versions?language_tag=${lang_tag_3}&type=all`;
+
+        console.log(`Request received for all versions in language (ISO 639-1): ${langParam}, mapped to (ISO 639-3): ${lang_tag_3}`);
+        console.log(`Fetching data from: ${apiUrl}`);
+
+        try {
+            const response = await axios.get(apiUrl, {
+                timeout: 10000 // 10 seconds timeout
+            });
+
+            // Check if the response has data
+            if (response.data) {
+                console.log(`Successfully fetched versions for language: ${langParam}`);
+
+                // Save to S3 cache for future requests
+                try {
+                    const tempFilePath = path.join(os.tmpdir(), `${uuidv4()}.json`);
+                    await fs.writeFile(tempFilePath, JSON.stringify(response.data));
+                    await uploadToS3(s3Key, tempFilePath, 'application/json');
+                    console.log(`Successfully cached versions in S3 with key: ${s3Key}`);
+                } catch (s3Error) {
+                    console.error('Error saving to S3 cache:', s3Error.message);
+                    // Continue with response even if S3 save fails
+                }
+
+                return res.json(response.data);
+            } else {
+                console.warn(`Received empty or unexpected data structure for versions language: ${langParam}`);
+                return res.status(404).json({ error: `No versions found for language tag: ${langParam}` });
+            }
+
+        } catch (error) {
+            console.error(`Failed to fetch versions for language ${langParam}: ${error.message}`);
+            const statusCode = error.response ? error.response.status : 500;
+            const errorMessage = `Failed to retrieve Bible versions for language ${langParam}. ${error.message}`;
+            return res.status(statusCode).json({ error: errorMessage });
+        }
+    } else {
+        console.log(`Parameter '${langParam}' doesn't look like a valid 2-letter language code. Sending 400.`);
+        return res.status(400).json({ error: `Invalid language parameter format: ${langParam}. Expected 2-letter ISO 639-1 code.` });
+    }
+});
+
 // Route handler for fetching Bible chapter data using abbreviation
 router.get('/:lang/:bible_abbreviation/:bible_book/:bible_chapter', async (req, res) => {
     const { lang, bible_abbreviation, bible_book, bible_chapter } = req.params;
@@ -576,7 +647,6 @@ router.post('/audio-bible', async (req, res) => {
     }
 });
 
-
 // Route handler for fetching Bible version data using abbreviation
 router.get('/:lang/:bible_abbreviation', async (req, res) => {
     const { lang, bible_abbreviation } = req.params;
@@ -699,77 +769,6 @@ router.get('/:lang/:bible_abbreviation', async (req, res) => {
             }
         }
         attempt++;
-    }
-});
-
-// Route handler for fetching all versions by language (defined last to avoid conflict)
-// Accepts ISO 639-1 (e.g., 'es') and converts to ISO 639-3 (e.g., 'spa') for the API call
-router.get('/:lang', async (req, res) => {
-    const langParam = req.params.lang.toLowerCase(); // Ensure lowercase for matching map keys
-
-    // Check if the input looks like a 2-letter ISO 639-1 code
-    if (langParam && langParam.length === 2) {
-        const lang_tag_3 = langCodeMap[langParam]; // Look up the 3-letter code
-
-        if (!lang_tag_3) {
-            console.log(`Unsupported ISO 639-1 language code received: ${langParam}`);
-            return res.status(400).json({ error: `Unsupported or unknown language code: ${langParam}. Please use a supported 2-letter ISO 639-1 code.` });
-        }
-
-        // First try to get from S3 cache
-        const s3Key = `versions/${langParam}.json`;
-        try {
-            const exists = await checkJsonExists(s3Key);
-            if (exists) {
-                console.log(`Found cached versions in S3 for key: ${s3Key}`);
-                const cachedData = await getJsonFromS3(s3Key);
-                return res.json(cachedData);
-            }
-        } catch (s3Error) {
-            console.error(`Error checking S3 cache for key ${s3Key}:`, s3Error.message);
-            // Continue with normal flow if S3 check fails
-        }
-
-        const apiUrl = `https://www.bible.com/api/bible/versions?language_tag=${lang_tag_3}&type=all`;
-
-        console.log(`Request received for all versions in language (ISO 639-1): ${langParam}, mapped to (ISO 639-3): ${lang_tag_3}`);
-        console.log(`Fetching data from: ${apiUrl}`);
-
-        try {
-            const response = await axios.get(apiUrl, {
-                timeout: 10000 // 10 seconds timeout
-            });
-
-            // Check if the response has data
-            if (response.data) {
-                console.log(`Successfully fetched versions for language: ${langParam}`);
-
-                // Save to S3 cache for future requests
-                try {
-                    const tempFilePath = path.join(os.tmpdir(), `${uuidv4()}.json`);
-                    await fs.writeFile(tempFilePath, JSON.stringify(response.data));
-                    await uploadToS3(s3Key, tempFilePath, 'application/json');
-                    console.log(`Successfully cached versions in S3 with key: ${s3Key}`);
-                } catch (s3Error) {
-                    console.error('Error saving to S3 cache:', s3Error.message);
-                    // Continue with response even if S3 save fails
-                }
-
-                return res.json(response.data);
-            } else {
-                console.warn(`Received empty or unexpected data structure for versions language: ${langParam}`);
-                return res.status(404).json({ error: `No versions found for language tag: ${langParam}` });
-            }
-
-        } catch (error) {
-            console.error(`Failed to fetch versions for language ${langParam}: ${error.message}`);
-            const statusCode = error.response ? error.response.status : 500;
-            const errorMessage = `Failed to retrieve Bible versions for language ${langParam}. ${error.message}`;
-            return res.status(statusCode).json({ error: errorMessage });
-        }
-    } else {
-        console.log(`Parameter '${langParam}' doesn't look like a valid 2-letter language code. Sending 400.`);
-        return res.status(400).json({ error: `Invalid language parameter format: ${langParam}. Expected 2-letter ISO 639-1 code.` });
     }
 });
 

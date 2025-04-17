@@ -52,7 +52,7 @@ testRoute('GET Bible version info', async () => {
 
 // Test 4: Get all versions by language
 testRoute('GET All versions by language', async () => {
-  const url = `${API_BASE}/es`;
+  const url = `${API_BASE}/versions/es`;
   console.log('GET URL:', url);
   const response = await axios.get(url);
   if (!response.data || !Array.isArray(response.data.versions)) {
