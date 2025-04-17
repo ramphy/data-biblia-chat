@@ -213,7 +213,7 @@ router.get('/versions', async (req, res) => {
         if (exists) {
             console.log(`Found cached versions configuration in S3 for key: ${s3Key}`);
             const cachedData = await getJsonFromS3(s3Key);
-            return res.json({ data: cachedData.default_versions });
+            return res.json({ cachedData });
         }
     } catch (s3Error) {
         console.error(`Error checking S3 cache for key ${s3Key}:`, s3Error.message);
@@ -234,15 +234,21 @@ router.get('/versions', async (req, res) => {
             // Save to S3 cache for future requests
             try {
                 const tempFilePath = path.join(os.tmpdir(), `${uuidv4()}.json`);
-                await fs.writeFile(tempFilePath, JSON.stringify(response.data));
-                await uploadToS3(s3Key, tempFilePath, 'application/json');
-                console.log(`Successfully cached versions configuration in S3 with key: ${s3Key}`);
+                const versionsData = response.data.default_versions;
+        
+                if (versionsData) {
+                    await fs.writeFile(tempFilePath, JSON.stringify({data: versionsData}));
+                    await uploadToS3(s3Key, tempFilePath, 'application/json');
+                    console.log(`Successfully cached versions configuration in S3 with key: ${s3Key}`);
+                } else {
+                    console.warn('No default_versions found in response data');
+                }
             } catch (s3Error) {
                 console.error('Error saving to S3 cache:', s3Error.message);
-                // Continue with response even if S3 save fails
+                // Optionally, add more error handling or logging here
             }
-
-            return res.json({ data: response.data.default_versions });
+        
+            return res.json({ data: versionsData });
         } else {
             console.warn('Received empty or unexpected data structure for versions configuration');
             return res.status(404).json({ error: 'No versions configuration found' });
