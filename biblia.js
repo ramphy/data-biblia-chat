@@ -234,7 +234,7 @@ router.get('/versions', async (req, res) => {
             // Save to S3 cache for future requests
             try {
                 const tempFilePath = path.join(os.tmpdir(), `${uuidv4()}.json`);
-                const versionsData = response.data.default_versions;
+                const versionsData = response.response.data.default_versions;
         
                 if (versionsData) {
                     await fs.writeFile(tempFilePath, JSON.stringify({data: versionsData}));
