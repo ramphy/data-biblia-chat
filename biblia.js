@@ -5,6 +5,7 @@ const { Pool } = require('pg');
 const os = require('os');
 const path = require('path');
 const fs = require('fs').promises; // Added fs.promises for async file operations
+const { v4: uuidv4 } = require('uuid'); // Import uuid for generating unique filenames
 const {
     splitTextIntoChunks,
     generateAudioSpeechify,
