@@ -409,25 +409,19 @@ router.post('/audio-bible', async (req, res) => {
 
     console.log(`POST /audio-bible request received for: ${bible_reference_log} with lang: ${bible_lang}`);
 
-    let dbClient;
     const tempDir = os.tmpdir();
     let tempAudioFiles = []; // Keep track of temporary files created
 
     try {
-        // 1. Check Database using individual fields (excluding lang)
-        dbClient = await pool.connect();
-        console.log(`Checking DB for: ${normAbbr}, ${normBook}, ${normChapter}`);
-        const dbCheckResult = await dbClient.query(
-            `SELECT s3_url FROM audio_biblia
-             WHERE bible_abbreviation = $1 AND bible_book = $2 AND bible_chapter = $3`,
-            [normAbbr, normBook, normChapter]
-        );
-
-        if (dbCheckResult.rows.length > 0) {
-            console.log(`Audio found in DB for ${bible_reference_log}. Returning cached URL.`);
-            return res.json({ audio_url: dbCheckResult.rows[0].s3_url });
+        // 1. Check if audio exists in S3
+        const s3Key = `audio/${normAbbr}/${normBook}/${normChapter}.mp3`;
+        const exists = await checkJsonExists(s3Key);
+        if (exists) {
+            console.log(`Found cached audio in S3 for key: ${s3Key}`);
+            const s3Url = `https://s3.redmasiva.ai/file/${s3BucketName}/${s3Key}`;
+            return res.json({ audio_url: s3Url });
         }
-        console.log(`Audio not found in DB for ${bible_reference_log}. Proceeding to generate.`);
+        console.log(`Audio not found in S3 for ${bible_reference_log}. Proceeding to generate.`);
 
         // 2. Fetch Text Internally
         let fetchedText = '';
