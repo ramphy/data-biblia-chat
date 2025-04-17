@@ -593,7 +593,7 @@ router.get('/:lang/:bible_abbreviation', async (req, res) => {
     console.log(`Request received for version info: ${lang}/${bible_abbreviation} (ID: ${bible_id})`);
 
     // First try to get from S3 cache
-                    const s3Key = `versions/${bible_abbreviation}.json`; // Eliminamos el idioma de la clave S3
+                    const s3Key = `versions/language/${langParam}.json`; // Guardamos en la ruta correcta con el idioma
     try {
         const exists = await checkJsonExists(s3Key);
         if (exists) {
