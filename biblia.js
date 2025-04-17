@@ -464,7 +464,7 @@ router.post('/audio-bible', async (req, res) => {
         const exists = await checkJsonExists(s3Key);
         if (exists) {
             console.log(`Found cached audio in S3 for key: ${s3Key}`);
-            const s3Url = `https://s3.redmasiva.ai/file/${s3BucketName}/${s3Key}`;
+            const s3Url = `https://s3.redmasiva.ai/file/data-biblia-chat/${s3Key}`;
             return res.json({ audio_url: s3Url });
         }
         console.log(`Audio not found in S3 for ${bible_reference_log}. Proceeding to generate.`);
