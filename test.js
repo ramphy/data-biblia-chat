@@ -33,10 +33,10 @@ testRoute('POST Generate audio Bible', async () => {
     bible_chapter: '1',
     bible_lang: 'es'
   });
-  if (!response.data || !response.data.data.audio_url) {
+  if (!response.data || !response.data.audio_url) {
     throw new Error('Missing audio URL in response');
   }
-  console.log('Audio URL:', response.data.data.audio_url);
+  console.log('Audio URL:', response.data.audio_url);
 });
 
 // Test 3: Get Bible version info
