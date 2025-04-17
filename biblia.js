@@ -633,7 +633,7 @@ router.get('/:lang/:bible_abbreviation', async (req, res) => {
                     };
 
                     if (book.chapters && book.chapters.length > 0) {
-                        newBook.first_chapter = book.chapters[0];
+                        newBook.first_chapter = book.usfm + ".1";
                         newBook.last_chapter = book.chapters[book.chapters.length - 1];
                     }
 
