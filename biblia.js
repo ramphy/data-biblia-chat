@@ -231,7 +231,7 @@ router.get('/versions', async (req, res) => {
 
         if (response.data) {
             console.log('Successfully fetched versions configuration');
-            versionsData = response.response.data.default_versions;
+            versionsData = response.data.response.data.default_versions;
             
             // Save to S3 cache for future requests
             try {
