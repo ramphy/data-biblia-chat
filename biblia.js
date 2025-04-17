@@ -8,9 +8,11 @@ const fs = require('fs').promises; // Added fs.promises for async file operation
 const {
     splitTextIntoChunks,
     generateAudioSpeechify,
-    saveAudioChunkFromBase64, // Import the correct function
+    saveAudioChunkFromBase64,
     concatenateAudioFiles,
     uploadToS3,
+    checkJsonExists,
+    getJsonFromS3,
     SPEECHIFY_CHAR_LIMIT
 } = require('./audio_utils'); // Import audio utilities
 
@@ -96,6 +98,20 @@ router.get('/:lang/:bible_abbreviation/:bible_book/:bible_chapter', async (req, 
 
     console.log(`Request received for: ${lang}/${bible_abbreviation} (ID: ${bible_id})/${bible_book}/${bible_chapter}`);
 
+    // First try to get from S3 cache
+    const s3Key = `text/${bible_abbreviation}/${bible_book.toUpperCase()}/${bible_chapter}.json`;
+    try {
+        const exists = await checkJsonExists(s3Key);
+        if (exists) {
+            console.log(`Found cached JSON in S3 for key: ${s3Key}`);
+            const cachedData = await getJsonFromS3(s3Key);
+            return res.json(cachedData);
+        }
+    } catch (s3Error) {
+        console.error(`Error checking S3 cache for key ${s3Key}:`, s3Error.message);
+        // Continue with normal flow if S3 check fails
+    }
+
     let attempt = 1;
     while (attempt <= 2) { // Allow one initial attempt and one retry
         try {
@@ -176,6 +192,19 @@ router.get('/:lang/:bible_abbreviation/:bible_book/:bible_chapter', async (req, 
                   };
 
                  console.log(`Attempt ${attempt}: Successfully fetched and processed data.`);
+                 
+                 // Save to S3 cache for future requests
+                 try {
+                     const s3Key = `text/${bible_abbreviation}/${bible_book.toUpperCase()}/${bible_chapter}.json`;
+                     const tempFilePath = path.join(os.tmpdir(), `${uuidv4()}.json`);
+                     await fs.writeFile(tempFilePath, JSON.stringify(simplifiedResponse));
+                     await uploadToS3(s3Key, tempFilePath, 'application/json');
+                     console.log(`Successfully cached response in S3 with key: ${s3Key}`);
+                 } catch (s3Error) {
+                     console.error('Error saving to S3 cache:', s3Error.message);
+                     // Continue with response even if S3 save fails
+                 }
+                 
                  return res.json(simplifiedResponse); // Send the simplified response
             } else {
                  // If response is OK but data is unexpected, treat as an error for retry

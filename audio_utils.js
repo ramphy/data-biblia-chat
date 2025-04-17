@@ -202,11 +202,48 @@ async function uploadToS3(key, filePath, contentType) {
     }
 }
 
+/**
+ * Checks if a JSON file exists in S3 by making a HEAD request
+ * @param {string} key - The S3 object key
+ * @returns {Promise<boolean>} - True if file exists, false otherwise
+ */
+async function checkJsonExists(key) {
+    const url = `https://s3.redmasiva.ai/file/${s3BucketName}/${key}`;
+    try {
+        const response = await axios.head(url, { timeout: 5000 });
+        return response.status === 200;
+    } catch (error) {
+        if (error.response?.status === 404) {
+            return false;
+        }
+        console.error(`Error checking JSON existence for key ${key}:`, error.message);
+        return false;
+    }
+}
+
+/**
+ * Gets a JSON file from S3
+ * @param {string} key - The S3 object key
+ * @returns {Promise<object|null>} - The parsed JSON or null if not found
+ */
+async function getJsonFromS3(key) {
+    const url = `https://s3.redmasiva.ai/file/${s3BucketName}/${key}`;
+    try {
+        const response = await axios.get(url, { timeout: 5000 });
+        return response.data;
+    } catch (error) {
+        console.error(`Error getting JSON from S3 for key ${key}:`, error.message);
+        return null;
+    }
+}
+
 module.exports = {
     splitTextIntoChunks,
     generateAudioSpeechify,
-    saveAudioChunkFromBase64, // Updated function name
+    saveAudioChunkFromBase64,
     concatenateAudioFiles,
     uploadToS3,
+    checkJsonExists,
+    getJsonFromS3,
     SPEECHIFY_CHAR_LIMIT
 };
