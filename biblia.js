@@ -717,7 +717,7 @@ router.get('/:lang', async (req, res) => {
         }
 
         // First try to get from S3 cache
-        const s3Key = `versions/language/${langParam}.json`;
+        const s3Key = `versions/${langParam}.json`;
         try {
             const exists = await checkJsonExists(s3Key);
             if (exists) {
