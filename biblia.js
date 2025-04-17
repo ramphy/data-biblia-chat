@@ -554,9 +554,9 @@ router.post('/audio-bible', async (req, res) => {
             console.log(`Fetching text from internal API: ${textApiUrl}`);
             const textResponse = await axios.get(textApiUrl, { timeout: 5000 }); // 5 second timeout
 
-            if (textResponse.data && textResponse.data.title && Array.isArray(textResponse.data.content)) {
-                const title = textResponse.data.title;
-                const content = textResponse.data.content;
+            if (textResponse.data && textResponse.data.data.title && Array.isArray(textResponse.data.data.content)) {
+                const title = textResponse.data.data.title;
+                const content = textResponse.data.data.content;
                 let textParts = [];
 
                 // Add formatted title
@@ -664,7 +664,7 @@ router.get('/:lang/:bible_abbreviation', async (req, res) => {
     console.log(`Request received for version info: ${lang}/${bible_abbreviation} (ID: ${bible_id})`);
 
     // First try to get from S3 cache
-                    const s3Key = `versions/${lang}/${bible_abbreviation}.json`; // Guardamos en la ruta correcta con el idioma
+    const s3Key = `versions/${lang}/${bible_abbreviation}.json`; // Guardamos en la ruta correcta con el idioma
     try {
         const exists = await checkJsonExists(s3Key);
         if (exists) {
@@ -734,7 +734,6 @@ router.get('/:lang/:bible_abbreviation', async (req, res) => {
 
                 // Save to S3 cache for future requests
                 try {
-                    const s3Key = `versions/${bible_abbreviation}.json`; // Eliminamos el idioma de la clave S3
                     const tempFilePath = path.join(os.tmpdir(), `${uuidv4()}.json`);
                     await fs.writeFile(tempFilePath, JSON.stringify({data: versionData }));
                     await uploadToS3(s3Key, tempFilePath, 'application/json');
