@@ -341,23 +341,23 @@ router.get('/versions/:lang', async (req, res) => {
 });
 
 // Route handler for fetching Bible chapter data using abbreviation
-router.get('/:bible_abbreviation/:bible_book/:bible_chapter', async (req, res) => {
-    const { lang, bible_abbreviation, bible_book, bible_chapter } = req.params;
+router.get('/:bible_usfm/:bible_book/:bible_chapter', async (req, res) => {
+    const { lang, bible_usfm, bible_book, bible_chapter } = req.params;
 
     // Look up the bible_id from the abbreviation
-    const bible_id = bibleVersionMap[bible_abbreviation];
+    const bible_id = bibleVersionMap[bible_usfm];
 
     if (!bible_id) {
-        console.log(`Bible abbreviation not found: ${bible_abbreviation}`);
-        return res.status(404).json({ error: `Bible version abbreviation '${bible_abbreviation}' not found.` });
+        console.log(`Bible abbreviation not found: ${bible_usfm}`);
+        return res.status(404).json({ error: `Bible version abbreviation '${bible_usfm}' not found.` });
     }
 
     const bible_id_json = `${bible_id}.json`; // Construct the JSON filename using the found ID
 
-    console.log(`Request received for: ${bible_abbreviation} (ID: ${bible_id})/${bible_book}/${bible_chapter}`);
+    console.log(`Request received for: ${bible_usfm} (ID: ${bible_id})/${bible_book}/${bible_chapter}`);
 
     // First try to get from S3 cache
-    const s3Key = `text/${bible_abbreviation}/${bible_book.toUpperCase()}/${bible_chapter}.json`;
+    const s3Key = `text/${bible_usfm}/${bible_book.toUpperCase()}/${bible_chapter}.json`;
     try {
         const exists = await checkJsonExists(s3Key);
         if (exists) {
@@ -375,8 +375,8 @@ router.get('/:bible_abbreviation/:bible_book/:bible_chapter', async (req, res) =
         try {
             const buildId = await getBuildId(); // Get current or fetch new BUILD_ID
             // Use the looked-up bible_id and ensure bible_book is uppercase in the API URL
-            const apiUrl = `https://www.bible.com/_next/data/${buildId}/es/bible/${bible_id}/${bible_book.toUpperCase()}.${bible_chapter}.${bible_abbreviation}.json?versionId=${bible_id}&usfm=${bible_book.toUpperCase()}.${bible_chapter}.${bible_abbreviation}`;
-            // const apiUrl = `https://www.bible.com/_next/data/${buildId}/${lang}/bible/${bible_id}/${bible_book.toUpperCase()}.${bible_chapter}.${bible_abbreviation}.json?versionId=${bible_id}&usfm=${bible_book.toUpperCase()}.${bible_chapter}.${bible_abbreviation}`; // Also updated commented line for consistency
+            const apiUrl = `https://www.bible.com/_next/data/${buildId}/es/bible/${bible_id}/${bible_book.toUpperCase()}.${bible_chapter}.${bible_usfm}.json?versionId=${bible_id}&usfm=${bible_book.toUpperCase()}.${bible_chapter}.${bible_usfm}`;
+            // const apiUrl = `https://www.bible.com/_next/data/${buildId}/${lang}/bible/${bible_id}/${bible_book.toUpperCase()}.${bible_chapter}.${bible_usfm}.json?versionId=${bible_id}&usfm=${bible_book.toUpperCase()}.${bible_chapter}.${bible_usfm}`; // Also updated commented line for consistency
 
             console.log(`Attempt ${attempt}: Fetching data from ${apiUrl}`);
             const bibleResponse = await axios.get(apiUrl, {
@@ -453,7 +453,7 @@ router.get('/:bible_abbreviation/:bible_book/:bible_chapter', async (req, res) =
                  
                  // Save to S3 cache for future requests
                  try {
-                     const s3Key = `text/${bible_abbreviation}/${bible_book.toUpperCase()}/${bible_chapter}.json`;
+                     const s3Key = `text/${bible_usfm}/${bible_book.toUpperCase()}/${bible_chapter}.json`;
                      const tempFilePath = path.join(os.tmpdir(), `${uuidv4()}.json`);
                      await fs.writeFile(tempFilePath, JSON.stringify({data: simplifiedResponse}));
                      await uploadToS3(s3Key, tempFilePath, 'application/json');
@@ -503,15 +503,15 @@ router.post('/audio', async (req, res) => {
     // Extract data from JSON body - Removed 'text', added bible_lang
     const {
         // text,            // REMOVED: Text will be fetched internally
-        bible_abbreviation, // Bible version abbreviation (e.g., "NVI-S")
+        bible_usfm, // Bible version abbreviation (e.g., "NVI-S")
         bible_book,         // Book code (e.g., "GEN")
         bible_chapter,      // Chapter number (e.g., "1")
         bible_lang          // NEW: Language identifier (e.g., "es")
     } = req.body;
 
     // Basic Input Validation - Removed 'text' check, added bible_lang check
-    if (!bible_abbreviation || !bible_book || !bible_chapter || !bible_lang) {
-        return res.status(400).json({ error: "Missing required fields: 'bible_abbreviation', 'bible_book', 'bible_chapter', and 'bible_lang' are required in the JSON body." });
+    if (!bible_usfm || !bible_book || !bible_chapter || !bible_lang) {
+        return res.status(400).json({ error: "Missing required fields: 'bible_usfm', 'bible_book', 'bible_chapter', and 'bible_lang' are required in the JSON body." });
     }
 
     // Determine language_code and voice_name based on bible_lang
@@ -530,7 +530,7 @@ router.post('/audio', async (req, res) => {
     }
 
     // Normalize inputs for consistency (remains the same)
-    const normAbbr = bible_abbreviation;
+    const normAbbr = bible_usfm;
     const normBook = bible_book.toUpperCase();
     const normChapter = bible_chapter.toString();
 
@@ -557,7 +557,7 @@ router.post('/audio', async (req, res) => {
         // 2. Fetch Text Internally
         let fetchedText = '';
         try {
-            const textApiUrl = `http://localhost:1020/api/${bible_lang}/${bible_abbreviation}/${bible_book}/${bible_chapter}`; // Corrected API path
+            const textApiUrl = `http://localhost:1020/api/${bible_lang}/${bible_usfm}/${bible_book}/${bible_chapter}`; // Corrected API path
             console.log(`Fetching text from internal API: ${textApiUrl}`);
             const textResponse = await axios.get(textApiUrl, { timeout: 5000 }); // 5 second timeout
 
@@ -655,23 +655,23 @@ router.post('/audio', async (req, res) => {
 });
 
 // Route handler for fetching Bible version data using abbreviation
-router.get('/:bible_abbreviation', async (req, res) => {
-    const { lang, bible_abbreviation } = req.params;
+router.get('/:bible_usfm', async (req, res) => {
+    const { lang, bible_usfm } = req.params;
 
     // Look up the bible_id from the abbreviation
-    const bible_id = bibleVersionMap[bible_abbreviation];
+    const bible_id = bibleVersionMap[bible_usfm];
 
     if (!bible_id) {
-        console.log(`Bible abbreviation not found for version info: ${bible_abbreviation}`);
-        return res.status(404).json({ error: `Bible version abbreviation '${bible_abbreviation}' not found.` });
+        console.log(`Bible abbreviation not found for version info: ${bible_usfm}`);
+        return res.status(404).json({ error: `Bible version abbreviation '${bible_usfm}' not found.` });
     }
 
     const bible_id_json = `${bible_id}.json`; // Construct the JSON filename using the found ID
 
-    console.log(`Request received for version info: ${lang}/${bible_abbreviation} (ID: ${bible_id})`);
+    console.log(`Request received for version info: ${lang}/${bible_usfm} (ID: ${bible_id})`);
 
     // First try to get from S3 cache
-    const s3Key = `versions/${lang}/${bible_abbreviation}.json`; // Guardamos en la ruta correcta con el idioma
+    const s3Key = `versions/${lang}/${bible_usfm}.json`; // Guardamos en la ruta correcta con el idioma
     try {
         const exists = await checkJsonExists(s3Key);
         if (exists) {
