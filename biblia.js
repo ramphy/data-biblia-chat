@@ -499,7 +499,7 @@ router.get('/:bible_abbreviation/:bible_book/:bible_chapter', async (req, res) =
 });
 
 // --- New POST Audio Bible Endpoint ---
-router.post('/audio-bible', async (req, res) => {
+router.post('/audio', async (req, res) => {
     // Extract data from JSON body - Removed 'text', added bible_lang
     const {
         // text,            // REMOVED: Text will be fetched internally
