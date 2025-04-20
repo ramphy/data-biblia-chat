@@ -538,7 +538,7 @@ router.post('/audio', async (req, res) => {
     const bible_reference_log = `${normAbbr}/${normBook}/${normChapter}`;
     const s3Key = `audio/${normAbbr}/${normBook}/${normChapter}.mp3`; // S3 key format without lang
 
-    console.log(`POST /audio request received for: ${bible_reference_log} with lang: ${bible_lang}`);
+    console.log(`POST /audio-bible request received for: ${bible_reference_log} with lang: ${bible_lang}`);
 
     const tempDir = os.tmpdir();
     let tempAudioFiles = []; // Keep track of temporary files created
@@ -555,11 +555,11 @@ router.post('/audio', async (req, res) => {
         console.log(`Audio not found in S3 for ${bible_reference_log}. Proceeding to generate.`);
 
         // 2. Fetch Text Internally
-        let fetchedText = '';
-        try {
-            const textApiUrl = `http://localhost:1020/api/${bible_lang}/${bible_usfm}/${bible_book}/${bible_chapter}`; // Corrected API path
-            console.log(`Fetching text from internal API: ${textApiUrl}`);
-            const textResponse = await axios.get(textApiUrl, { timeout: 5000 }); // 5 second timeout
+            let fetchedText = '';
+            try {
+                const textApiUrl = `http://localhost:1020/api/${bible_usfm}/${bible_book}/${bible_chapter}`; // Corrected API path
+                console.log(`Fetching text from internal API: ${textApiUrl}`);
+                const textResponse = await axios.get(textApiUrl, { timeout: 5000 }); // 5 second timeout
 
             if (textResponse.data && textResponse.data.data.title && Array.isArray(textResponse.data.data.content)) {
                 const title = textResponse.data.data.title;
