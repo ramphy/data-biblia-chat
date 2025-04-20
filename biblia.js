@@ -538,7 +538,7 @@ router.post('/audio', async (req, res) => {
     const bible_reference_log = `${normAbbr}/${normBook}/${normChapter}`;
     const s3Key = `audio/${normAbbr}/${normBook}/${normChapter}.mp3`; // S3 key format without lang
 
-    console.log(`POST /audio-bible request received for: ${bible_reference_log} with lang: ${bible_lang}`);
+    console.log(`POST /audio request received for: ${bible_reference_log} with lang: ${bible_lang}`);
 
     const tempDir = os.tmpdir();
     let tempAudioFiles = []; // Keep track of temporary files created
